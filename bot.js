@@ -3,7 +3,7 @@ const { Client, GatewayIntentBits, EmbedBuilder, SlashCommandBuilder, Permission
 // ============================
 // CONFIGURATION - EDIT THESE
 // ============================
-const BOT_TOKEN = 'MTUwMTI3NTE2NDc2MTkxOTU4OQ.GrKF0l.zB5WxeQFGeNfk8K692AecU9g8TErDVnaNO8t3Q'; // Replace with your bot token
+const BOT_TOKEN = process.env.BOT_TOKEN || 'MTUwMTI3NTE2NDc2MTkxOTU4OQ.GrKF0l.zB5WxeQFGeNfk8K692AecU9g8TErDVnaNO8t3Q'; // Use env var for Railway
 const ALLOWED_USER_ID = '1350293413915918367'; // User who can always run command
 const LOG_CHANNEL_ID = '1482790191407173733'; // Channel for role assignment logs
 const BLACKLIST_LOG_CHANNEL_ID = '1482790260432961650'; // Channel for blacklist logs
@@ -13,114 +13,103 @@ const BLACKLIST_ROLE_ID = '1479345579669848134'; // Blacklist role ID
 const STRIKE_1_ROLE_ID = '1501054755089154179'; // Strike 1 role
 const STRIKE_2_ROLE_ID = '1479345540532539443'; // Strike 2 role
 
-// Role Configuration
-const ROLES_CONFIG = {
-    // Primary roles with their automatic sub-roles
-    "FOUNDER (PAY)": {
-        roleId: "1469853355756228759",
-        autoRoles: ["1479345519586316489", "1479369071974940769", "1485133595009089626", "1479345519024144416", "1479345520194486325", "1477571643692810262"]
-    },
-    "Owner": {
-        roleId: "1491333172439420968",
-        autoRoles: ["1479345519586316489", "1479369071974940769", "1485133595009089626", "1479345519024144416", "1479345520194486325", "1477571643692810262"]
-    },
-    "Co Owner": {
-        roleId: "1479345499441074206",
-        autoRoles: ["1479345519586316489", "1479369071974940769", "1485133595009089626", "1479345519024144416", "1479345520194486325", "1477571643692810262"]
-    },
-    "CEO": {
-        roleId: "1500931584243531858",
-        autoRoles: ["1479345519586316489", "1479369071974940769", "1485133595009089626", "1479345519024144416", "1479345520194486325", "1477571643692810262"]
-    },
-    "Supervisor": {
-        roleId: "1500084210172428459",
-        autoRoles: ["1479345511067554002", "1493678098514968576"]
-    },
-    "Superior": {
-        roleId: "1479345508928721074",
-        autoRoles: ["1479345511067554002", "1493678098514968576"]
-    },
-    "Server Director": {
-        roleId: "1479345512606863380",
-        autoRoles: ["1479345511067554002", "1493678098514968576"]
-    },
-    "Staff Director": {
-        roleId: "1479345513244659752",
-        autoRoles: ["1479345511067554002", "1493678098514968576"]
-    },
-    "Operations": {
-        roleId: "1479345516100980877",
-        autoRoles: ["1479345511067554002", "1493678098514968576"]
-    },
-    "Executive": {
-        roleId: "1479345516814008411",
-        autoRoles: ["1479345511067554002", "1493678098514968576"]
-    },
-    "Overseer": {
-        roleId: "1479345520874094752",
-        autoRoles: ["1479345511067554002", "1493678098514968576"]
-    },
-    "Server Management": {
-        roleId: "1479345521649909760",
-        autoRoles: ["1479345525009416343"]
-    },
-    "Head Management": {
-        roleId: "1479345522270670939",
-        autoRoles: ["1479345525009416343"]
-    },
-    "Senior Management": {
-        roleId: "1479345522933502024",
-        autoRoles: ["1479345525009416343"]
-    },
-    "Management": {
-        roleId: "1479345523801723051",
-        autoRoles: ["1479345525009416343"]
-    },
-    "Trial Management": {
-        roleId: "1479345524388663346",
-        autoRoles: ["1479345525009416343"]
-    },
-    "Community Manager": {
-        roleId: "1479345525689159744",
-        autoRoles: ["1479345532261371965"]
-    },
-    "Head of Staff": {
-        roleId: "1479345529845583913",
-        autoRoles: ["1479345532261371965"]
-    },
-    "Lead Administrator": {
-        roleId: "1479345531477168230",
-        autoRoles: ["1479345532261371965"]
-    },
-    "Head Administrator": {
-        roleId: "1479345532848570369",
-        autoRoles: ["1493650573315149956"]
-    },
-    "Senior Administrator": {
-        roleId: "1479345533414932592",
-        autoRoles: ["1493650573315149956"]
-    },
-    "Administrator": {
-        roleId: "1479345534685806736",
-        autoRoles: ["1493650573315149956"]
-    },
-    "Head Moderator": {
-        roleId: "1479345536669585478",
-        autoRoles: ["1493650573315149956"]
-    },
-    "Moderator": {
-        roleId: "1479345537928134737",
-        autoRoles: ["1493650573315149956"]
-    },
-    "Trial Moderator": {
-        roleId: "1479345538657816646",
-        autoRoles: ["1493650573315149956"]
-    }
-};
+// ============================
+// ROLE HIERARCHY CONFIGURATION
+// ============================
+// This is the EXACT hierarchy from your list, in order from top to bottom
+// Roles in [] are auto-assigned based on position in hierarchy
+const ROLE_HIERARCHY = [
+    // Top roles (non-staff)
+    { name: '+_+', id: '1500238161668870164', isStaff: false, isAuto: false },
+    { name: 'BOTS', id: '1480327888858513678', isStaff: false, isAuto: false },
+    { name: 'FOUNDER (PAY)', id: '1469853355756228759', isStaff: true, isAuto: false },
+    { name: 'DANGER (ABOVE ALL)', id: '1500394491075498074', isStaff: false, isAuto: false },
+    { name: 'Owner', id: '1491333172439420968', isStaff: true, isAuto: false },
+    { name: 'Co Owner', id: '1479345499441074206', isStaff: true, isAuto: false },
+    { name: 'CEO', id: '1500931584243531858', isStaff: true, isAuto: false },
+    { name: 'Network', id: '1500079403739381891', isStaff: false, isAuto: false },
+    { name: 'CLOTHING DEVELOPER', id: '1485362267297026140', isStaff: false, isAuto: false },
+    { name: 'Superior', id: '1479345508928721074', isStaff: true, isAuto: false },
+    { name: 'Server Director', id: '1479345512606863380', isStaff: true, isAuto: false },
+    { name: 'Staff Director', id: '1479345513244659752', isStaff: true, isAuto: false },
+    
+    // Auto roles (square brackets) - these get assigned based on hierarchy
+    { name: '[Key & Coin Access]', id: '1479345519586316489', isStaff: false, isAuto: true },
+    { name: '[Ban Perms]', id: '1479369071974940769', isStaff: false, isAuto: true },
+    { name: '[Scale Menu]', id: '1485133595009089626', isStaff: false, isAuto: true },
+    { name: '[Sale & 2x Access]', id: '1479345519024144416', isStaff: false, isAuto: true },
+    { name: '[AntiCheat Access]', id: '1479345520194486325', isStaff: false, isAuto: true },
+    { name: '[AirDrop Perms]', id: '1477571643692810262', isStaff: false, isAuto: true },
+    
+    // Staff roles
+    { name: 'Supervisor', id: '1500084210172428459', isStaff: true, isAuto: false },
+    { name: 'Operations', id: '1479345516100980877', isStaff: true, isAuto: false },
+    { name: 'Executive', id: '1479345516814008411', isStaff: true, isAuto: false },
+    { name: 'Overseer', id: '1479345520874094752', isStaff: true, isAuto: false },
+    
+    // More auto roles
+    { name: '[Role Perms]', id: '1479345511067554002', isStaff: false, isAuto: true },
+    { name: '[Executive Team]', id: '1493678098514968576', isStaff: false, isAuto: true },
+    
+    // Management roles
+    { name: 'Server Management', id: '1479345521649909760', isStaff: true, isAuto: false },
+    { name: 'Head Management', id: '1479345522270670939', isStaff: true, isAuto: false },
+    { name: 'Senior Management', id: '1479345522933502024', isStaff: true, isAuto: false },
+    { name: 'Management', id: '1479345523801723051', isStaff: true, isAuto: false },
+    { name: 'Trial Management', id: '1479345524388663346', isStaff: true, isAuto: false },
+    
+    // More auto roles
+    { name: '[Management Team]', id: '1479345525009416343', isStaff: false, isAuto: true },
+    
+    // More staff roles
+    { name: 'Community Manager', id: '1479345525689159744', isStaff: true, isAuto: false },
+    { name: 'Head of Staff', id: '1479345529845583913', isStaff: true, isAuto: false },
+    { name: 'Lead Administrator', id: '1479345531477168230', isStaff: true, isAuto: false },
+    
+    // More auto roles
+    { name: '[Higher Ups]', id: '1479345532261371965', isStaff: false, isAuto: true },
+    
+    // Admin roles
+    { name: 'Head Administrator', id: '1479345532848570369', isStaff: true, isAuto: false },
+    { name: 'Senior Administrator', id: '1479345533414932592', isStaff: true, isAuto: false },
+    { name: 'Administrator', id: '1479345534685806736', isStaff: true, isAuto: false },
+    
+    // More staff roles
+    { name: 'Head Moderator', id: '1479345536669585478', isStaff: true, isAuto: false },
+    { name: 'Moderator', id: '1479345537928134737', isStaff: true, isAuto: false },
+    { name: 'Trial Moderator', id: '1479345538657816646', isStaff: true, isAuto: false },
+    
+    // Final auto role (Staff Team - gives to ALL staff)
+    { name: '[Staff Team]', id: '1493650573315149956', isStaff: false, isAuto: true }
+];
 
-// Store blacklisted users and strike counts
-let blacklistedUsers = new Set();
-let userStrikes = new Map(); // Map of user ID to strike count
+// ============================
+// HELPER FUNCTIONS
+// ============================
+function getAllStaffRoles() {
+    return ROLE_HIERARCHY.filter(role => role.isStaff && !role.isAuto);
+}
+
+function getAutoRolesForRank(rankName) {
+    const rankIndex = ROLE_HIERARCHY.findIndex(role => role.name === rankName);
+    if (rankIndex === -1) return [];
+    
+    const autoRoles = [];
+    
+    // Find all auto roles that come AFTER this rank in the hierarchy
+    for (let i = rankIndex + 1; i < ROLE_HIERARCHY.length; i++) {
+        if (ROLE_HIERARCHY[i].isAuto) {
+            autoRoles.push(ROLE_HIERARCHY[i]);
+        }
+    }
+    
+    return autoRoles;
+}
+
+function hasPlusPlusRole(member) {
+    const plusPlusRole = ROLE_HIERARCHY.find(role => role.name === '+_+');
+    return plusPlusRole && member.roles.cache.has(plusPlusRole.id);
+}
 
 // ============================
 // BOT SETUP
@@ -133,6 +122,10 @@ const client = new Client({
         GatewayIntentBits.GuildPresences
     ] 
 });
+
+// Store blacklisted users and strike counts
+let blacklistedUsers = new Set();
+let userStrikes = new Map();
 
 client.once('ready', async () => {
     console.log(`✅ Bot logged in as ${client.user.tag}`);
@@ -154,8 +147,10 @@ client.once('ready', async () => {
 // ============================
 async function registerSlashCommands() {
     try {
+        const staffRoles = getAllStaffRoles();
+        
         const commands = [
-            // /staff command
+            // /staff command with ALL staff roles as choices
             new SlashCommandBuilder()
                 .setName('staff')
                 .setDescription('Assign staff role with automatic sub-roles')
@@ -163,6 +158,19 @@ async function registerSlashCommands() {
                     option.setName('user')
                         .setDescription('The user to assign role to')
                         .setRequired(true))
+                .addStringOption(option => {
+                    const builder = option
+                        .setName('rank')
+                        .setDescription('Staff rank to assign')
+                        .setRequired(true);
+                    
+                    // Add all staff roles as choices
+                    staffRoles.forEach(role => {
+                        builder.addChoices({ name: role.name, value: role.name });
+                    });
+                    
+                    return builder;
+                })
                 .toJSON(),
             
             // /blacklist command
@@ -189,7 +197,7 @@ async function registerSlashCommands() {
                         .setRequired(true))
                 .addStringOption(option =>
                     option.setName('reason')
-                        .setDescription('Reason for unblacklisting')
+                        .setDescription('Reason for unblacklist')
                         .setRequired(false))
                 .toJSON(),
             
@@ -240,118 +248,12 @@ function hasPermission(member) {
         return true;
     }
     
-    return false;
-}
-
-// ============================
-// ROLE MANAGEMENT FUNCTIONS
-// ============================
-function getAllStaffRoleIds() {
-    const allRoleIds = new Set();
-    
-    // Add all main role IDs
-    for (const config of Object.values(ROLES_CONFIG)) {
-        allRoleIds.add(config.roleId);
-        // Add all auto role IDs
-        for (const autoRoleId of config.autoRoles) {
-            allRoleIds.add(autoRoleId);
-        }
-    }
-    
-    return Array.from(allRoleIds);
-}
-
-// ============================
-// STRIKE MANAGEMENT FUNCTIONS
-// ============================
-function getStrikeRoles() {
-    return [STRIKE_1_ROLE_ID, STRIKE_2_ROLE_ID];
-}
-
-async function giveStrike(interaction, targetUser, reason) {
-    try {
-        const targetMember = await interaction.guild.members.fetch(targetUser.id);
-        
-        // Check if already blacklisted
-        if (targetMember.roles.cache.has(BLACKLIST_ROLE_ID)) {
-            return { success: false, error: 'User is already blacklisted.' };
-        }
-        
-        // Get current strike count
-        const currentStrikes = userStrikes.get(targetUser.id) || 0;
-        const newStrikeCount = currentStrikes + 1;
-        
-        // Update strike count
-        userStrikes.set(targetUser.id, newStrikeCount);
-        
-        // Remove previous strike roles
-        const strikeRoles = getStrikeRoles();
-        for (const strikeRoleId of strikeRoles) {
-            if (targetMember.roles.cache.has(strikeRoleId)) {
-                await targetMember.roles.remove(strikeRoleId);
-            }
-        }
-        
-        let action = '';
-        
-        // Apply appropriate strike role or blacklist
-        if (newStrikeCount === 1) {
-            // Give strike 1 role
-            const strike1Role = interaction.guild.roles.cache.get(STRIKE_1_ROLE_ID);
-            if (strike1Role) {
-                await targetMember.roles.add(strike1Role);
-                action = 'Strike 1 given';
-            }
-        } else if (newStrikeCount === 2) {
-            // Give strike 2 role
-            const strike2Role = interaction.guild.roles.cache.get(STRIKE_2_ROLE_ID);
-            if (strike2Role) {
-                await targetMember.roles.add(strike2Role);
-                action = 'Strike 2 given';
-            }
-        } else if (newStrikeCount >= 3) {
-            // Auto blacklist on 3rd strike
-            const result = await blacklistUser(interaction, targetUser, `Auto-blacklisted: Reached 3 strikes. Last reason: ${reason}`);
-            if (result.success) {
-                action = 'Auto-blacklisted (3rd strike)';
-                // Reset strikes after blacklisting
-                userStrikes.delete(targetUser.id);
-            } else {
-                return { success: false, error: result.error };
-            }
-        }
-        
-        return { 
-            success: true, 
-            strikeCount: newStrikeCount,
-            action: action,
-            previousStrikes: currentStrikes
-        };
-        
-    } catch (error) {
-        console.error('Error giving strike:', error);
-        return { success: false, error: error.message };
-    }
-}
-
-async function removeStrikes(targetMember) {
-    try {
-        // Remove all strike roles
-        const strikeRoles = getStrikeRoles();
-        for (const strikeRoleId of strikeRoles) {
-            if (targetMember.roles.cache.has(strikeRoleId)) {
-                await targetMember.roles.remove(strikeRoleId);
-            }
-        }
-        
-        // Remove from strike tracking
-        userStrikes.delete(targetMember.id);
-        
+    // Check if user has the +_+ role (can reassign staff roles)
+    if (hasPlusPlusRole(member)) {
         return true;
-    } catch (error) {
-        console.error('Error removing strikes:', error);
-        return false;
     }
+    
+    return false;
 }
 
 // ============================
@@ -527,23 +429,96 @@ async function logUnblacklist(interaction, targetUser, reason) {
 }
 
 // ============================
-// SELECT MENU CREATION
+// STRIKE MANAGEMENT FUNCTIONS
 // ============================
-function createRankSelectMenu() {
-    const options = Object.keys(ROLES_CONFIG).map(rank => 
-        new StringSelectMenuOptionBuilder()
-            .setLabel(rank)
-            .setValue(rank)
-            .setDescription(`Assign ${rank} role`)
-    );
+function getStrikeRoles() {
+    return [STRIKE_1_ROLE_ID, STRIKE_2_ROLE_ID];
+}
 
-    return new ActionRowBuilder()
-        .addComponents(
-            new StringSelectMenuBuilder()
-                .setCustomId('rank_select')
-                .setPlaceholder('Select a staff rank...')
-                .addOptions(...options)
-        );
+async function giveStrike(interaction, targetUser, reason) {
+    try {
+        const targetMember = await interaction.guild.members.fetch(targetUser.id);
+        
+        // Check if already blacklisted
+        if (targetMember.roles.cache.has(BLACKLIST_ROLE_ID)) {
+            return { success: false, error: 'User is already blacklisted.' };
+        }
+        
+        // Get current strike count
+        const currentStrikes = userStrikes.get(targetUser.id) || 0;
+        const newStrikeCount = currentStrikes + 1;
+        
+        // Update strike count
+        userStrikes.set(targetUser.id, newStrikeCount);
+        
+        // Remove previous strike roles
+        const strikeRoles = getStrikeRoles();
+        for (const strikeRoleId of strikeRoles) {
+            if (targetMember.roles.cache.has(strikeRoleId)) {
+                await targetMember.roles.remove(strikeRoleId);
+            }
+        }
+        
+        let action = '';
+        
+        // Apply appropriate strike role or blacklist
+        if (newStrikeCount === 1) {
+            // Give strike 1 role
+            const strike1Role = interaction.guild.roles.cache.get(STRIKE_1_ROLE_ID);
+            if (strike1Role) {
+                await targetMember.roles.add(strike1Role);
+                action = 'Strike 1 given';
+            }
+        } else if (newStrikeCount === 2) {
+            // Give strike 2 role
+            const strike2Role = interaction.guild.roles.cache.get(STRIKE_2_ROLE_ID);
+            if (strike2Role) {
+                await targetMember.roles.add(strike2Role);
+                action = 'Strike 2 given';
+            }
+        } else if (newStrikeCount >= 3) {
+            // Auto blacklist on 3rd strike
+            const result = await blacklistUser(interaction, targetUser, `Auto-blacklisted: Reached 3 strikes. Last reason: ${reason}`);
+            if (result.success) {
+                action = 'Auto-blacklisted (3rd strike)';
+                // Reset strikes after blacklisting
+                userStrikes.delete(targetUser.id);
+            } else {
+                return { success: false, error: result.error };
+            }
+        }
+        
+        return { 
+            success: true, 
+            strikeCount: newStrikeCount,
+            action: action,
+            previousStrikes: currentStrikes
+        };
+        
+    } catch (error) {
+        console.error('Error giving strike:', error);
+        return { success: false, error: error.message };
+    }
+}
+
+async function removeStrikes(targetMember) {
+    try {
+        // Remove all strike roles
+        const strikeRoles = getStrikeRoles();
+        for (const strikeRoleId of strikeRoles) {
+            if (targetMember.roles.cache.has(strikeRoleId)) {
+                await targetMember.roles.remove(strikeRoleId);
+            }
+        }
+        
+        // Remove from strike tracking
+        userStrikes.delete(targetMember.id);
+        
+        return true;
+    } catch (error) {
+        console.error('Error removing strikes:', error);
+        return false;
+    }
 }
 
 // ============================
@@ -564,7 +539,7 @@ async function blacklistUser(interaction, targetUser, reason) {
         }
         
         // Get all staff roles to remove
-        const staffRoleIds = getAllStaffRoleIds();
+        const staffRoleIds = getAllStaffRoles().map(role => role.id);
         const rolesToRemove = [];
         
         // Find which staff roles the user has
@@ -691,7 +666,7 @@ client.on('interactionCreate', async interaction => {
         // Check permissions for all commands
         if (!hasPermission(interaction.member)) {
             return interaction.reply({ 
-                content: '❌ You do not have permission to use this command. You need the "Role Perms" role.',
+                content: '❌ You do not have permission to use this command. You need the "Role Perms" role or +_+ role.',
                 ephemeral: true 
             });
         }
@@ -707,16 +682,13 @@ client.on('interactionCreate', async interaction => {
         } else if (interaction.commandName === 'viewstrikes') {
             await handleViewStrikesCommand(interaction);
         }
-    } else if (interaction.isStringSelectMenu()) {
-        if (interaction.customId === 'rank_select') {
-            await handleRankSelect(interaction);
-        }
     }
 });
 
-// Handle /staff command (shows dropdown)
+// Handle /staff command
 async function handleStaffCommand(interaction) {
     const targetUser = interaction.options.getUser('user');
+    const rank = interaction.options.getString('rank');
     
     // Check if trying to assign to self
     if (targetUser.id === interaction.user.id) {
@@ -742,63 +714,29 @@ async function handleStaffCommand(interaction) {
         });
     }
     
-    // Create and send dropdown menu
-    const selectMenu = createRankSelectMenu();
-    
-    await interaction.reply({ 
-        content: `🎯 **Select a rank for ${targetUser.tag}:**`,
-        components: [selectMenu],
-        ephemeral: true 
-    });
-}
-
-// Handle rank selection from dropdown
-async function handleRankSelect(interaction) {
-    const rank = interaction.values[0];
-    const message = await interaction.message.fetch();
-    const targetUserMatch = message.content.match(/for (.+?):/);
-    
-    if (!targetUserMatch) {
-        return interaction.update({ 
-            content: '❌ Error: Could not find target user.',
-            components: [],
-            ephemeral: true 
-        });
-    }
-    
-    const targetUsername = targetUserMatch[1];
-    const targetUser = interaction.guild.members.cache.find(member => 
-        member.user.tag === targetUsername || member.user.username === targetUsername
-    )?.user;
-    
-    if (!targetUser) {
-        return interaction.update({ 
-            content: '❌ Error: Target user not found in server.',
-            components: [],
-            ephemeral: true 
-        });
-    }
-    
     try {
         await interaction.deferReply({ ephemeral: true });
         
         const targetMember = await interaction.guild.members.fetch(targetUser.id);
-        const roleConfig = ROLES_CONFIG[rank];
         
-        if (!roleConfig) {
-            return interaction.editReply({ content: '❌ Invalid rank selected.' });
+        // Find the selected rank in hierarchy
+        const selectedRank = ROLE_HIERARCHY.find(role => role.name === rank);
+        if (!selectedRank || !selectedRank.isStaff) {
+            return interaction.editReply({ content: '❌ Invalid staff rank selected.' });
         }
         
         // Get main role
-        const mainRole = interaction.guild.roles.cache.get(roleConfig.roleId);
+        const mainRole = interaction.guild.roles.cache.get(selectedRank.id);
         if (!mainRole) {
-            return interaction.editReply({ content: `❌ Main role for "${rank}" not found on server.` });
+            return interaction.editReply({ content: `❌ Main role "${rank}" not found on server.` });
         }
         
-        // Get auto roles
+        // Get auto roles based on hierarchy (all square bracket roles below the selected rank)
+        const autoRoleConfigs = getAutoRolesForRank(rank);
         const autoRoles = [];
-        for (const autoRoleId of roleConfig.autoRoles) {
-            const autoRole = interaction.guild.roles.cache.get(autoRoleId);
+        
+        for (const autoRoleConfig of autoRoleConfigs) {
+            const autoRole = interaction.guild.roles.cache.get(autoRoleConfig.id);
             if (autoRole) {
                 autoRoles.push(autoRole);
             }
