@@ -1,0 +1,16 @@
+{
+  "name": "discord-staff-bot",
+  "version": "1.0.0",
+  "description": "Discord staff management bot with strike system",
+  "main": "bot.js",
+  "scripts": {
+    "start": "node bot.js",
+    "dev": "node bot.js"
+  },
+  "dependencies": {
+    "discord.js": "^14.16.3"
+  },
+  "engines": {
+    "node": ">=16.9.0"
+  }
+}
