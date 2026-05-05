@@ -19,7 +19,7 @@ const STRIKE_2_ROLE_ID = '1479345540532539443'; // Strike 2 role
 const SUPPORT_TEAM_ROLE_ID = '1500879485984182483'; // Support team role ID
 
 // Tebex Configuration
-const TEBEX_SECRET = process.env.TEBEX_SECRET || 'YOUR_TEBEX_SECRET_HERE';
+const TEBEX_SECRET = process.env.TEBEX_SECRET || '1778925510a062bd75be45cdff6495fb02a3c378';
 const TEBEX_STORE_ID = process.env.TEBEX_STORE_ID || '';
 const CLAIM_ROLE_ID = process.env.CLAIM_ROLE_ID || '1484401977684398191'; // Optional: Role to give after claiming
 
