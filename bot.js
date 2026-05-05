@@ -1,5 +1,4 @@
 const { Client, GatewayIntentBits, EmbedBuilder, SlashCommandBuilder, PermissionFlagsBits, ActionRowBuilder, StringSelectMenuBuilder, StringSelectMenuOptionBuilder, ButtonBuilder, ButtonStyle, ModalBuilder, TextInputBuilder, TextInputStyle } = require('discord.js');
-const { joinVoiceChannel, createAudioPlayer, createAudioResource, StreamType, entersState, VoiceConnectionStatus, AudioPlayerStatus } = require('@discordjs/voice');
 const axios = require('axios');
 const sqlite3 = require('sqlite3').verbose();
 const { open } = require('sqlite');
@@ -17,7 +16,6 @@ const REQUIRED_ROLE_ID = '1479345511067554002'; // "Role Perms" role ID
 const BLACKLIST_ROLE_ID = '1479345579669848134'; // Blacklist role ID
 const STRIKE_1_ROLE_ID = '1501054755089154179'; // Strike 1 role
 const STRIKE_2_ROLE_ID = '1479345540532539443'; // Strike 2 role
-const VOICE_CHANNEL_ID = '1491782921852424433'; // VC to auto-join on launch
 const SUPPORT_TEAM_ROLE_ID = '1500879485984182483'; // Support team role ID
 
 // Tebex Configuration
@@ -185,15 +183,6 @@ async function getPlayerInfo(tebexId) {
 }
 
 // ============================
-// VOICE CHAT VARIABLES
-// ============================
-let voiceConnection = null;
-let audioPlayer = null;
-let reconnectAttempts = 0;
-const MAX_RECONNECT_ATTEMPTS = 5;
-const RECONNECT_DELAY = 5000; // 5 seconds
-
-// ============================
 // HELPER FUNCTIONS
 // ============================
 function getAllStaffRoles() {
@@ -235,12 +224,12 @@ function hasPermission(member, command = '') {
     }
     
     // For support team commands
-    if (command === 'support') {
+    if (command === 'check') {
         return hasSupportTeamRole(member);
     }
     
     // For staff management commands
-    if (['staff', 'blacklist', 'unblacklist', 'strike', 'viewstrikes', 'voice'].includes(command)) {
+    if (['staff', 'blacklist', 'unblacklist', 'strike', 'viewstrikes'].includes(command)) {
         // Check if user has the required role
         if (member.roles.cache.has(REQUIRED_ROLE_ID)) {
             return true;
@@ -255,13 +244,13 @@ function hasPermission(member, command = '') {
     }
     
     // For admin Tebex commands
-    if (['tebexsync', 'tebexstats', 'check'].includes(command)) {
+    if (['tebexsync', 'tebexstats'].includes(command)) {
         return member.permissions.has('ADMINISTRATOR') || 
                member.roles.cache.has(REQUIRED_ROLE_ID) || 
                hasPlusPlusRole(member);
     }
     
-    // Default permission (for purchase viewing)
+    // Default permission (for purchase viewing, claim, etc.)
     return true;
 }
 
@@ -685,91 +674,6 @@ async function claimTebexId(interaction, tebexId) {
 }
 
 // ============================
-// VOICE CHAT FUNCTIONS
-// ============================
-async function joinVoiceChat(client) {
-    try {
-        console.log(`🔊 Attempting to join voice channel: ${VOICE_CHANNEL_ID}`);
-        
-        const voiceChannel = await client.channels.fetch(VOICE_CHANNEL_ID);
-        if (!voiceChannel) {
-            console.error('❌ Voice channel not found');
-            return;
-        }
-        
-        if (!voiceChannel.isVoiceBased()) {
-            console.error('❌ Channel is not a voice channel');
-            return;
-        }
-        
-        // Join the voice channel
-        voiceConnection = joinVoiceChannel({
-            channelId: voiceChannel.id,
-            guildId: voiceChannel.guild.id,
-            adapterCreator: voiceChannel.guild.voiceAdapterCreator,
-            selfDeaf: false, // Bot is not deafened (can hear)
-            selfMute: true   // Bot is muted (won't transmit audio)
-        });
-        
-        console.log('✅ Successfully joined voice channel');
-        
-        // Create an audio player (for silent audio to keep connection active)
-        audioPlayer = createAudioPlayer();
-        
-        // Create a silent audio resource (1 second of silence, looped)
-        const silentAudio = createAudioResource('silence.mp3', {
-            inputType: StreamType.Arbitrary,
-            inlineVolume: true
-        });
-        
-        // Play silent audio
-        audioPlayer.play(silentAudio);
-        voiceConnection.subscribe(audioPlayer);
-        
-        console.log('🔇 Playing silent audio to maintain connection');
-        
-        // Set up connection event handlers
-        voiceConnection.on(VoiceConnectionStatus.Ready, () => {
-            console.log('✅ Voice connection ready');
-            reconnectAttempts = 0; // Reset reconnect attempts on successful connection
-        });
-        
-        voiceConnection.on(VoiceConnectionStatus.Disconnected, async () => {
-            console.log('⚠️ Voice connection disconnected, attempting to reconnect...');
-            reconnectAttempts++;
-            
-            if (reconnectAttempts <= MAX_RECONNECT_ATTEMPTS) {
-                setTimeout(() => joinVoiceChat(client), RECONNECT_DELAY);
-            } else {
-                console.error(`❌ Failed to reconnect after ${MAX_RECONNECT_ATTEMPTS} attempts`);
-            }
-        });
-        
-        voiceConnection.on(VoiceConnectionStatus.Destroyed, () => {
-            console.log('❌ Voice connection destroyed');
-            reconnectAttempts = 0;
-        });
-        
-        voiceConnection.on('error', error => {
-            console.error('❌ Voice connection error:', error);
-        });
-        
-        // Log to console that bot appears to be in VC
-        console.log('🎮 Bot is now in voice channel - will appear as "In Voice Channel" to users');
-        
-    } catch (error) {
-        console.error('❌ Error joining voice channel:', error);
-        
-        // Attempt to reconnect after delay
-        if (reconnectAttempts < MAX_RECONNECT_ATTEMPTS) {
-            reconnectAttempts++;
-            console.log(`🔄 Reconnect attempt ${reconnectAttempts}/${MAX_RECONNECT_ATTEMPTS} in ${RECONNECT_DELAY/1000}s...`);
-            setTimeout(() => joinVoiceChat(client), RECONNECT_DELAY);
-        }
-    }
-}
-
-// ============================
 // BOT SETUP
 // ============================
 const client = new Client({ 
@@ -778,7 +682,6 @@ const client = new Client({
         GatewayIntentBits.GuildMembers,
         GatewayIntentBits.GuildMessages,
         GatewayIntentBits.GuildPresences,
-        GatewayIntentBits.GuildVoiceStates,
         GatewayIntentBits.MessageContent
     ] 
 });
@@ -791,7 +694,7 @@ client.once('ready', async () => {
     console.log(`✅ Bot logged in as ${client.user.tag}`);
     console.log(`📊 Serving ${client.guilds.cache.size} server(s)`);
     
-    // Set bot status to show it's "in a call"
+    // Set bot status
     client.user.setPresence({
         activities: [{
             name: 'Staff & Purchase Management',
@@ -799,9 +702,6 @@ client.once('ready', async () => {
         }],
         status: 'online'
     });
-    
-    // Join voice channel on startup
-    await joinVoiceChat(client);
     
     // Initialize database
     await initializeDatabase();
@@ -909,22 +809,6 @@ async function registerSlashCommands() {
                     option.setName('user')
                         .setDescription('The user to check')
                         .setRequired(false))
-                .toJSON(),
-            
-            // VOICE COMMAND
-            new SlashCommandBuilder()
-                .setName('voice')
-                .setDescription('Control bot voice connection')
-                .addStringOption(option =>
-                    option.setName('action')
-                        .setDescription('Action to perform')
-                        .setRequired(true)
-                        .addChoices(
-                            { name: 'Join VC', value: 'join' },
-                            { name: 'Leave VC', value: 'leave' },
-                            { name: 'Reconnect', value: 'reconnect' },
-                            { name: 'Status', value: 'status' }
-                        ))
                 .toJSON(),
             
             // TEBEX PURCHASE COMMANDS
@@ -1394,7 +1278,7 @@ client.on('interactionCreate', async interaction => {
         if (!hasPermission(interaction.member, interaction.commandName)) {
             let errorMsg = '❌ You do not have permission to use this command.';
             
-            if (['staff', 'blacklist', 'unblacklist', 'strike', 'viewstrikes', 'voice'].includes(interaction.commandName)) {
+            if (['staff', 'blacklist', 'unblacklist', 'strike', 'viewstrikes'].includes(interaction.commandName)) {
                 errorMsg += ' You need the "Role Perms" role, +_+ role, or be the allowed user.';
             } else if (interaction.commandName === 'check') {
                 errorMsg += ' You need to be in the support team.';
@@ -1419,8 +1303,6 @@ client.on('interactionCreate', async interaction => {
             await handleStrikeCommand(interaction);
         } else if (interaction.commandName === 'viewstrikes') {
             await handleViewStrikesCommand(interaction);
-        } else if (interaction.commandName === 'voice') {
-            await handleVoiceCommand(interaction);
         } else if (interaction.commandName === 'claim') {
             await handleClaimCommand(interaction);
         } else if (interaction.commandName === 'purchases') {
@@ -1728,64 +1610,6 @@ async function handleViewStrikesCommand(interaction) {
         await interaction.reply({ 
             content: '❌ An error occurred while fetching strike information.',
             ephemeral: true 
-        });
-    }
-}
-
-async function handleVoiceCommand(interaction) {
-    const action = interaction.options.getString('action');
-    
-    try {
-        await interaction.deferReply({ ephemeral: true });
-        
-        switch (action) {
-            case 'join':
-                await joinVoiceChat(client);
-                await interaction.editReply({ 
-                    content: `✅ Attempting to join voice channel <#${VOICE_CHANNEL_ID}>...` 
-                });
-                break;
-                
-            case 'leave':
-                if (voiceConnection) {
-                    voiceConnection.destroy();
-                    voiceConnection = null;
-                    audioPlayer = null;
-                    await interaction.editReply({ 
-                        content: `✅ Left voice channel <#${VOICE_CHANNEL_ID}>` 
-                    });
-                } else {
-                    await interaction.editReply({ 
-                        content: '❌ Bot is not currently in a voice channel.' 
-                    });
-                }
-                break;
-                
-            case 'reconnect':
-                if (voiceConnection) {
-                    voiceConnection.destroy();
-                }
-                reconnectAttempts = 0;
-                await joinVoiceChat(client);
-                await interaction.editReply({ 
-                    content: `🔄 Attempting to reconnect to <#${VOICE_CHANNEL_ID}>...` 
-                });
-                break;
-                
-            case 'status':
-                const status = voiceConnection ? 
-                    `✅ Connected to <#${VOICE_CHANNEL_ID}>` : 
-                    '❌ Not connected to voice channel';
-                await interaction.editReply({ 
-                    content: `**Voice Status:**\n${status}` 
-                });
-                break;
-        }
-        
-    } catch (error) {
-        console.error('Error in voice command:', error);
-        await interaction.editReply({ 
-            content: '❌ An error occurred while processing the voice command.' 
         });
     }
 }
