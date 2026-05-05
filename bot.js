@@ -1,5 +1,8 @@
-const { Client, GatewayIntentBits, EmbedBuilder, SlashCommandBuilder, PermissionFlagsBits, ActionRowBuilder, StringSelectMenuBuilder, StringSelectMenuOptionBuilder } = require('discord.js');
+const { Client, GatewayIntentBits, EmbedBuilder, SlashCommandBuilder, PermissionFlagsBits, ActionRowBuilder, StringSelectMenuBuilder, StringSelectMenuOptionBuilder, ButtonBuilder, ButtonStyle, ModalBuilder, TextInputBuilder, TextInputStyle } = require('discord.js');
 const { joinVoiceChannel, createAudioPlayer, createAudioResource, StreamType, entersState, VoiceConnectionStatus, AudioPlayerStatus } = require('@discordjs/voice');
+const axios = require('axios');
+const sqlite3 = require('sqlite3').verbose();
+const { open } = require('sqlite');
 
 // ============================
 // CONFIGURATION - EDIT THESE
@@ -9,11 +12,18 @@ const ALLOWED_USER_ID = '1350293413915918367'; // User who can always run comman
 const LOG_CHANNEL_ID = '1482790191407173733'; // Channel for role assignment logs
 const BLACKLIST_LOG_CHANNEL_ID = '1482790260432961650'; // Channel for blacklist logs
 const STRIKE_LOG_CHANNEL_ID = '1482790224357490904'; // Channel for strike logs
+const TEBEX_LOG_CHANNEL_ID = '1482790268926296168'; // Channel for Tebex purchase logs
 const REQUIRED_ROLE_ID = '1479345511067554002'; // "Role Perms" role ID
 const BLACKLIST_ROLE_ID = '1479345579669848134'; // Blacklist role ID
 const STRIKE_1_ROLE_ID = '1501054755089154179'; // Strike 1 role
 const STRIKE_2_ROLE_ID = '1479345540532539443'; // Strike 2 role
 const VOICE_CHANNEL_ID = '1491782921852424433'; // VC to auto-join on launch
+const SUPPORT_TEAM_ROLE_ID = '1500879485984182483'; // Support team role ID
+
+// Tebex Configuration
+const TEBEX_SECRET = process.env.TEBEX_SECRET || 'YOUR_TEBEX_SECRET_HERE';
+const TEBEX_STORE_ID = process.env.TEBEX_STORE_ID || '';
+const CLAIM_ROLE_ID = process.env.CLAIM_ROLE_ID || '1484401977684398191'; // Optional: Role to give after claiming
 
 // ============================
 // ROLE HIERARCHY CONFIGURATION
@@ -86,6 +96,95 @@ const ROLE_HIERARCHY = [
 ];
 
 // ============================
+// DATABASE SETUP
+// ============================
+let db;
+async function initializeDatabase() {
+    db = await open({
+        filename: './tebex_purchases.db',
+        driver: sqlite3.Database
+    });
+
+    // Create tables if they don't exist
+    await db.exec(`
+        CREATE TABLE IF NOT EXISTS purchases (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            transaction_id TEXT UNIQUE,
+            tebex_id TEXT,
+            discord_id TEXT,
+            package_name TEXT,
+            price REAL,
+            currency TEXT,
+            status TEXT,
+            purchase_date TIMESTAMP,
+            claimed BOOLEAN DEFAULT FALSE,
+            claimed_at TIMESTAMP,
+            log_message_id TEXT
+        );
+        
+        CREATE TABLE IF NOT EXISTS tebex_links (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            tebex_id TEXT UNIQUE,
+            discord_id TEXT UNIQUE,
+            linked_at TIMESTAMP
+        );
+        
+        CREATE TABLE IF NOT EXISTS settings (
+            key TEXT PRIMARY KEY,
+            value TEXT
+        );
+        
+        CREATE INDEX IF NOT EXISTS idx_purchases_discord ON purchases(discord_id);
+        CREATE INDEX IF NOT EXISTS idx_purchases_tebex ON purchases(tebex_id);
+        CREATE INDEX IF NOT EXISTS idx_purchases_transaction ON purchases(transaction_id);
+    `);
+
+    // Initialize last webhook ID if not exists
+    const lastWebhook = await db.get("SELECT value FROM settings WHERE key = 'last_webhook_id'");
+    if (!lastWebhook) {
+        await db.run("INSERT INTO settings (key, value) VALUES ('last_webhook_id', '0')");
+    }
+    
+    console.log('✅ Database initialized');
+}
+
+// ============================
+// TEBEX API FUNCTIONS
+// ============================
+async function fetchRecentPurchases() {
+    try {
+        const response = await axios.get('https://plugin.tebex.io/payments', {
+            headers: {
+                'X-Tebex-Secret': TEBEX_SECRET
+            },
+            params: {
+                limit: 50 // Fetch recent 50 purchases
+            }
+        });
+        
+        return response.data.data || [];
+    } catch (error) {
+        console.error('Error fetching Tebex purchases:', error.message);
+        return [];
+    }
+}
+
+async function getPlayerInfo(tebexId) {
+    try {
+        const response = await axios.get(`https://plugin.tebex.io/user/${tebexId}`, {
+            headers: {
+                'X-Tebex-Secret': TEBEX_SECRET
+            }
+        });
+        
+        return response.data;
+    } catch (error) {
+        console.error('Error fetching player info:', error.message);
+        return null;
+    }
+}
+
+// ============================
 // VOICE CHAT VARIABLES
 // ============================
 let voiceConnection = null;
@@ -120,6 +219,469 @@ function getAutoRolesForRank(rankName) {
 function hasPlusPlusRole(member) {
     const plusPlusRole = ROLE_HIERARCHY.find(role => role.name === '+_+');
     return plusPlusRole && member.roles.cache.has(plusPlusRole.id);
+}
+
+function hasSupportTeamRole(member) {
+    return member.roles.cache.has(SUPPORT_TEAM_ROLE_ID);
+}
+
+// ============================
+// PERMISSION CHECK
+// ============================
+function hasPermission(member, command = '') {
+    // Check if user is the allowed user
+    if (member.id === ALLOWED_USER_ID) {
+        return true;
+    }
+    
+    // For support team commands
+    if (command === 'support') {
+        return hasSupportTeamRole(member);
+    }
+    
+    // For staff management commands
+    if (['staff', 'blacklist', 'unblacklist', 'strike', 'viewstrikes', 'voice'].includes(command)) {
+        // Check if user has the required role
+        if (member.roles.cache.has(REQUIRED_ROLE_ID)) {
+            return true;
+        }
+        
+        // Check if user has the +_+ role (can reassign staff roles)
+        if (hasPlusPlusRole(member)) {
+            return true;
+        }
+        
+        return false;
+    }
+    
+    // For admin Tebex commands
+    if (['tebexsync', 'tebexstats', 'check'].includes(command)) {
+        return member.permissions.has('ADMINISTRATOR') || 
+               member.roles.cache.has(REQUIRED_ROLE_ID) || 
+               hasPlusPlusRole(member);
+    }
+    
+    // Default permission (for purchase viewing)
+    return true;
+}
+
+// ============================
+// EMBED CREATION FUNCTIONS (TEBEX)
+// ============================
+function createPurchaseEmbed(purchase, discordUser = null) {
+    const embed = new EmbedBuilder()
+        .setColor(0x00FF00)
+        .setTitle('🎉 New Purchase!')
+        .setDescription(`A purchase has been made on the store`)
+        .addFields(
+            { name: '📦 Package', value: purchase.package_name || 'Unknown', inline: true },
+            { name: '💰 Price', value: `${purchase.currency || 'USD'} ${purchase.price || '0.00'}`, inline: true },
+            { name: '🆔 Transaction ID', value: `\`${purchase.transaction_id}\``, inline: true }
+        )
+        .setTimestamp(new Date(purchase.purchase_date || Date.now()));
+    
+    if (purchase.tebex_id) {
+        embed.addFields({ name: '👤 Tebex ID', value: `\`${purchase.tebex_id}\``, inline: true });
+    }
+    
+    if (discordUser) {
+        embed.addFields({ name: '🎯 Discord User', value: `${discordUser.tag} (\`${discordUser.id}\`)`, inline: true });
+        embed.setThumbnail(discordUser.displayAvatarURL({ dynamic: true }));
+    } else if (purchase.discord_id) {
+        embed.addFields({ name: '🎯 Discord ID', value: `\`${purchase.discord_id}\``, inline: true });
+    }
+    
+    if (purchase.status) {
+        const statusEmoji = purchase.status === 'Complete' ? '✅' : '🔄';
+        embed.addFields({ name: '📊 Status', value: `${statusEmoji} ${purchase.status}`, inline: true });
+    }
+    
+    // Add claim button if not claimed
+    if (purchase.tebex_id && !purchase.discord_id && !purchase.claimed) {
+        embed.setFooter({ 
+            text: '⚠️ This purchase needs to be claimed! Use /claim', 
+            iconURL: 'https://cdn.discordapp.com/emojis/1064442701119217744.webp?size=96&quality=lossless' 
+        });
+    }
+    
+    return embed;
+}
+
+function createClaimEmbed(tebexId, discordUser, totalSpent = 0, purchaseCount = 0) {
+    const embed = new EmbedBuilder()
+        .setColor(0x7289DA)
+        .setTitle('✅ Account Linked!')
+        .setDescription(`${discordUser.tag} has successfully linked their Tebex account`)
+        .addFields(
+            { name: '👤 Discord User', value: `${discordUser.tag} (\`${discordUser.id}\`)`, inline: true },
+            { name: '🎮 Tebex ID', value: `\`${tebexId}\``, inline: true },
+            { name: '📦 Total Purchases', value: `\`${purchaseCount}\``, inline: true },
+            { name: '💰 Total Spent', value: `\`$${totalSpent.toFixed(2)}\``, inline: true }
+        )
+        .setThumbnail(discordUser.displayAvatarURL({ dynamic: true }))
+        .setTimestamp();
+    
+    return embed;
+}
+
+function createCheckEmbed(tebexId, playerInfo, discordUser = null, purchases = []) {
+    const embed = new EmbedBuilder()
+        .setColor(0x3498DB)
+        .setTitle('🔍 Tebex ID Check')
+        .setDescription(`Information for Tebex ID: \`${tebexId}\``);
+    
+    if (playerInfo && playerInfo.player) {
+        embed.addFields(
+            { name: '👤 Username', value: playerInfo.player.username || tebexId, inline: true },
+            { name: '📧 Email', value: playerInfo.player.email || 'Not available', inline: true },
+            { name: '🌐 Language', value: playerInfo.player.language || 'Unknown', inline: true }
+        );
+        
+        if (playerInfo.player.ign) {
+            embed.addFields({ name: '🎮 Minecraft IGN', value: playerInfo.player.ign, inline: true });
+        }
+    }
+    
+    if (discordUser) {
+        embed.addFields({ 
+            name: '🔗 Linked Discord', 
+            value: `${discordUser.tag} (\`${discordUser.id}\`)`, 
+            inline: true 
+        });
+    }
+    
+    if (purchases.length > 0) {
+        const totalSpent = purchases.reduce((sum, p) => sum + (p.price || 0), 0);
+        embed.addFields(
+            { name: '📦 Total Purchases', value: `\`${purchases.length}\``, inline: true },
+            { name: '💰 Total Spent', value: `\`$${totalSpent.toFixed(2)}\``, inline: true }
+        );
+        
+        // Add recent purchase
+        const recentPurchase = purchases[0];
+        embed.addFields({
+            name: '🛍️ Most Recent Purchase',
+            value: `${recentPurchase.package_name} - $${recentPurchase.price} (${new Date(recentPurchase.purchase_date).toLocaleDateString()})`,
+            inline: false
+        });
+    } else {
+        embed.addFields({ name: '📦 Purchases', value: 'No purchases found', inline: true });
+    }
+    
+    embed.setTimestamp();
+    return embed;
+}
+
+function createStatsEmbed(user, tebexId, purchases, totalSpent) {
+    const embed = new EmbedBuilder()
+        .setColor(0xFFD700)
+        .setTitle('📊 Purchase Statistics')
+        .setDescription(`Purchase history for ${user ? user.tag : tebexId}`)
+        .addFields(
+            { name: '👤 User', value: user ? `${user.tag} (\`${user.id}\`)` : 'Not linked', inline: true },
+            { name: '🎮 Tebex ID', value: `\`${tebexId}\``, inline: true },
+            { name: '📦 Total Purchases', value: `\`${purchases.length}\``, inline: true },
+            { name: '💰 Total Spent', value: `\`$${totalSpent.toFixed(2)}\``, inline: true }
+        );
+    
+    // Add recent purchases (limit to 5)
+    const recentPurchases = purchases.slice(0, 5);
+    if (recentPurchases.length > 0) {
+        const purchaseList = recentPurchases.map(p => 
+            `• ${p.package_name} - $${p.price} (${new Date(p.purchase_date).toLocaleDateString()})`
+        ).join('\n');
+        
+        embed.addFields({ 
+            name: '🛍️ Recent Purchases', 
+            value: purchaseList,
+            inline: false 
+        });
+    }
+    
+    embed.setTimestamp();
+    return embed;
+}
+
+// ============================
+// PURCHASE HANDLING FUNCTIONS
+// ============================
+async function logPurchaseToDB(purchaseData) {
+    try {
+        await db.run(`
+            INSERT OR REPLACE INTO purchases (
+                transaction_id, tebex_id, discord_id, package_name, 
+                price, currency, status, purchase_date, claimed
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+        `, [
+            purchaseData.transaction_id,
+            purchaseData.tebex_id,
+            purchaseData.discord_id,
+            purchaseData.package_name,
+            purchaseData.price,
+            purchaseData.currency,
+            purchaseData.status || 'Complete',
+            purchaseData.purchase_date || new Date().toISOString(),
+            purchaseData.discord_id ? true : false
+        ]);
+        
+        console.log(`✅ Logged purchase: ${purchaseData.transaction_id}`);
+        return true;
+    } catch (error) {
+        console.error('Error logging purchase to DB:', error);
+        return false;
+    }
+}
+
+async function sendPurchaseLog(purchase, channel, discordUser = null) {
+    try {
+        const embed = createPurchaseEmbed(purchase, discordUser);
+        
+        // Create claim button if needed
+        let components = [];
+        if (purchase.tebex_id && !purchase.discord_id && !purchase.claimed) {
+            const row = new ActionRowBuilder()
+                .addComponents(
+                    new ButtonBuilder()
+                        .setCustomId(`claim_${purchase.transaction_id}`)
+                        .setLabel('Claim Purchase')
+                        .setStyle(ButtonStyle.Primary)
+                        .setEmoji('✅')
+                );
+            components = [row];
+        }
+        
+        const message = await channel.send({
+            embeds: [embed],
+            components: components
+        });
+        
+        // Store message ID in database
+        await db.run(
+            'UPDATE purchases SET log_message_id = ? WHERE transaction_id = ?',
+            [message.id, purchase.transaction_id]
+        );
+        
+        return message;
+    } catch (error) {
+        console.error('Error sending purchase log:', error);
+        return null;
+    }
+}
+
+async function processExistingPurchases(client) {
+    try {
+        console.log('🔄 Processing existing purchases...');
+        
+        const channel = await client.channels.fetch(TEBEX_LOG_CHANNEL_ID);
+        if (!channel) {
+            console.error('Tebex log channel not found');
+            return;
+        }
+        
+        // Get all unlogged purchases from database
+        const purchases = await db.all(`
+            SELECT * FROM purchases 
+            WHERE log_message_id IS NULL OR log_message_id = ''
+            ORDER BY purchase_date DESC
+            LIMIT 20
+        `);
+        
+        console.log(`📊 Found ${purchases.length} unlogged purchases`);
+        
+        for (const purchase of purchases) {
+            let discordUser = null;
+            if (purchase.discord_id) {
+                try {
+                    discordUser = await client.users.fetch(purchase.discord_id);
+                } catch (error) {
+                    console.log(`User ${purchase.discord_id} not found`);
+                }
+            }
+            
+            await sendPurchaseLog(purchase, channel, discordUser);
+            await new Promise(resolve => setTimeout(resolve, 500)); // Delay to avoid rate limits
+        }
+        
+        console.log('✅ Finished processing existing purchases');
+    } catch (error) {
+        console.error('Error processing existing purchases:', error);
+    }
+}
+
+async function syncRecentPurchases(client) {
+    try {
+        console.log('🔄 Syncing recent purchases from Tebex...');
+        
+        const purchases = await fetchRecentPurchases();
+        console.log(`📊 Fetched ${purchases.length} purchases from Tebex`);
+        
+        const channel = await client.channels.fetch(TEBEX_LOG_CHANNEL_ID);
+        if (!channel) {
+            console.error('Tebex log channel not found');
+            return;
+        }
+        
+        let newPurchases = 0;
+        
+        for (const purchase of purchases) {
+            // Check if purchase already exists in DB
+            const existing = await db.get(
+                'SELECT transaction_id FROM purchases WHERE transaction_id = ?',
+                [purchase.id]
+            );
+            
+            if (existing) continue; // Already logged
+            
+            // Try to find Discord ID from linked accounts
+            let discordId = null;
+            if (purchase.player && purchase.player.id) {
+                const link = await db.get(
+                    'SELECT discord_id FROM tebex_links WHERE tebex_id = ?',
+                    [purchase.player.id]
+                );
+                discordId = link ? link.discord_id : null;
+            }
+            
+            const purchaseData = {
+                transaction_id: purchase.id,
+                tebex_id: purchase.player ? purchase.player.id : null,
+                discord_id: discordId,
+                package_name: purchase.packages ? purchase.packages.map(p => p.name).join(', ') : 'Unknown',
+                price: purchase.amount,
+                currency: purchase.currency,
+                status: purchase.status || 'Complete',
+                purchase_date: purchase.date
+            };
+            
+            await logPurchaseToDB(purchaseData);
+            
+            let discordUser = null;
+            if (discordId) {
+                try {
+                    discordUser = await client.users.fetch(discordId);
+                } catch (error) {
+                    // User not found, that's okay
+                }
+            }
+            
+            await sendPurchaseLog(purchaseData, channel, discordUser);
+            newPurchases++;
+            
+            await new Promise(resolve => setTimeout(resolve, 300)); // Delay to avoid rate limits
+        }
+        
+        if (newPurchases > 0) {
+            console.log(`✅ Synced ${newPurchases} new purchases`);
+        }
+    } catch (error) {
+        console.error('Error syncing purchases:', error);
+    }
+}
+
+// ============================
+// CLAIM SYSTEM FUNCTIONS
+// ============================
+async function claimTebexId(interaction, tebexId) {
+    try {
+        // Verify Tebex ID exists
+        const playerInfo = await getPlayerInfo(tebexId);
+        if (!playerInfo) {
+            return { success: false, error: '❌ Invalid Tebex ID. Please check and try again.' };
+        }
+        
+        // Check if Tebex ID is already linked
+        const existingLink = await db.get(
+            'SELECT discord_id FROM tebex_links WHERE tebex_id = ?',
+            [tebexId]
+        );
+        
+        if (existingLink) {
+            return { 
+                success: false, 
+                error: '❌ This Tebex ID is already linked to another Discord account.' 
+            };
+        }
+        
+        // Check if user already has a linked account
+        const userLink = await db.get(
+            'SELECT tebex_id FROM tebex_links WHERE discord_id = ?',
+            [interaction.user.id]
+        );
+        
+        if (userLink) {
+            return { 
+                success: false, 
+                error: `❌ You already have a linked Tebex account: \`${userLink.tebex_id}\`` 
+            };
+        }
+        
+        // Link the accounts
+        await db.run(
+            'INSERT INTO tebex_links (tebex_id, discord_id, linked_at) VALUES (?, ?, ?)',
+            [tebexId, interaction.user.id, new Date().toISOString()]
+        );
+        
+        // Update all purchases with this Tebex ID
+        await db.run(
+            'UPDATE purchases SET discord_id = ?, claimed = TRUE, claimed_at = ? WHERE tebex_id = ? AND claimed = FALSE',
+            [interaction.user.id, new Date().toISOString(), tebexId]
+        );
+        
+        // Get purchase stats
+        const purchases = await db.all(
+            'SELECT * FROM purchases WHERE tebex_id = ? ORDER BY purchase_date DESC',
+            [tebexId]
+        );
+        
+        const totalSpent = purchases.reduce((sum, p) => sum + (p.price || 0), 0);
+        
+        // Update existing log messages
+        const channel = await interaction.client.channels.fetch(TEBEX_LOG_CHANNEL_ID);
+        if (channel) {
+            const purchaseMessages = await db.all(
+                'SELECT log_message_id FROM purchases WHERE tebex_id = ? AND log_message_id IS NOT NULL',
+                [tebexId]
+            );
+            
+            for (const msg of purchaseMessages) {
+                try {
+                    const message = await channel.messages.fetch(msg.log_message_id);
+                    const embed = createPurchaseEmbed(
+                        { ...purchases.find(p => p.log_message_id === msg.log_message_id) },
+                        interaction.user
+                    );
+                    
+                    await message.edit({ embeds: [embed], components: [] });
+                } catch (error) {
+                    // Message might be deleted, that's okay
+                }
+            }
+        }
+        
+        // Give role if configured
+        if (CLAIM_ROLE_ID) {
+            try {
+                const member = await interaction.guild.members.fetch(interaction.user.id);
+                const role = interaction.guild.roles.cache.get(CLAIM_ROLE_ID);
+                if (role) {
+                    await member.roles.add(role);
+                }
+            } catch (error) {
+                console.error('Error giving role:', error);
+            }
+        }
+        
+        return {
+            success: true,
+            tebexId: tebexId,
+            purchases: purchases,
+            totalSpent: totalSpent
+        };
+        
+    } catch (error) {
+        console.error('Error claiming Tebex ID:', error);
+        return { success: false, error: '❌ An error occurred while processing your claim.' };
+    }
 }
 
 // ============================
@@ -216,7 +778,8 @@ const client = new Client({
         GatewayIntentBits.GuildMembers,
         GatewayIntentBits.GuildMessages,
         GatewayIntentBits.GuildPresences,
-        GatewayIntentBits.GuildVoiceStates
+        GatewayIntentBits.GuildVoiceStates,
+        GatewayIntentBits.MessageContent
     ] 
 });
 
@@ -231,7 +794,7 @@ client.once('ready', async () => {
     // Set bot status to show it's "in a call"
     client.user.setPresence({
         activities: [{
-            name: 'Staff Management',
+            name: 'Staff & Purchase Management',
             type: 0 // Playing
         }],
         status: 'online'
@@ -240,6 +803,9 @@ client.once('ready', async () => {
     // Join voice channel on startup
     await joinVoiceChat(client);
     
+    // Initialize database
+    await initializeDatabase();
+    
     // Register slash commands
     await registerSlashCommands();
     
@@ -247,8 +813,18 @@ client.once('ready', async () => {
     await initializeBlacklistedUsers();
     await initializeStrikeCounts();
     
+    // Process existing purchases
+    await processExistingPurchases(client);
+    
+    // Sync recent purchases from Tebex
+    await syncRecentPurchases(client);
+    
+    // Set up periodic sync (every 5 minutes)
+    setInterval(() => syncRecentPurchases(client), 5 * 60 * 1000);
+    
     console.log(`🔄 Initialized ${blacklistedUsers.size} blacklisted users`);
     console.log(`⚡ Initialized ${userStrikes.size} users with strikes`);
+    console.log('🚀 Bot is fully operational!');
 });
 
 // ============================
@@ -259,6 +835,7 @@ async function registerSlashCommands() {
         const staffRoles = getAllStaffRoles();
         
         const commands = [
+            // STAFF MANAGEMENT COMMANDS
             // /staff command with ALL staff roles as choices
             new SlashCommandBuilder()
                 .setName('staff')
@@ -334,7 +911,7 @@ async function registerSlashCommands() {
                         .setRequired(false))
                 .toJSON(),
             
-            // /voice command to manually control voice
+            // VOICE COMMAND
             new SlashCommandBuilder()
                 .setName('voice')
                 .setDescription('Control bot voice connection')
@@ -348,41 +925,66 @@ async function registerSlashCommands() {
                             { name: 'Reconnect', value: 'reconnect' },
                             { name: 'Status', value: 'status' }
                         ))
+                .toJSON(),
+            
+            // TEBEX PURCHASE COMMANDS
+            // /claim command
+            new SlashCommandBuilder()
+                .setName('claim')
+                .setDescription('Link your Tebex account to your Discord')
+                .addStringOption(option =>
+                    option.setName('tebex_id')
+                        .setDescription('Your Tebex/Minecraft username')
+                        .setRequired(true))
+                .toJSON(),
+            
+            // /purchases command
+            new SlashCommandBuilder()
+                .setName('purchases')
+                .setDescription('View your purchase history')
+                .addUserOption(option =>
+                    option.setName('user')
+                        .setDescription('User to check (admin only)')
+                        .setRequired(false))
+                .addStringOption(option =>
+                    option.setName('tebex_id')
+                        .setDescription('Tebex ID to check (admin only)')
+                        .setRequired(false))
+                .toJSON(),
+            
+            // /check command (for support team)
+            new SlashCommandBuilder()
+                .setName('check')
+                .setDescription('Check a Tebex ID information')
+                .addStringOption(option =>
+                    option.setName('tebex_id')
+                        .setDescription('Tebex ID to check')
+                        .setRequired(true))
+                .toJSON(),
+            
+            // /tebexstats command
+            new SlashCommandBuilder()
+                .setName('tebexstats')
+                .setDescription('View store statistics (admin only)')
+                .toJSON(),
+            
+            // /tebexsync command (admin)
+            new SlashCommandBuilder()
+                .setName('tebexsync')
+                .setDescription('Manually sync purchases from Tebex (admin)')
                 .toJSON()
         ];
 
         // Register commands globally
         await client.application?.commands.set(commands);
-        console.log('✅ Slash commands registered globally');
+        console.log('✅ All slash commands registered globally');
     } catch (error) {
         console.error('Error registering commands:', error);
     }
 }
 
 // ============================
-// PERMISSION CHECK
-// ============================
-function hasPermission(member) {
-    // Check if user is the allowed user
-    if (member.id === ALLOWED_USER_ID) {
-        return true;
-    }
-    
-    // Check if user has the required role
-    if (member.roles.cache.has(REQUIRED_ROLE_ID)) {
-        return true;
-    }
-    
-    // Check if user has the +_+ role (can reassign staff roles)
-    if (hasPlusPlusRole(member)) {
-        return true;
-    }
-    
-    return false;
-}
-
-// ============================
-// LOGGING FUNCTIONS
+// LOGGING FUNCTIONS (STAFF)
 // ============================
 async function logRoleAssignment(interaction, targetUser, rank, mainRole, autoRoles) {
     try {
@@ -788,14 +1390,25 @@ async function initializeStrikeCounts() {
 // ============================
 client.on('interactionCreate', async interaction => {
     if (interaction.isChatInputCommand()) {
-        // Check permissions for all commands (except /voice)
-        if (interaction.commandName !== 'voice' && !hasPermission(interaction.member)) {
+        // Check permissions for the specific command
+        if (!hasPermission(interaction.member, interaction.commandName)) {
+            let errorMsg = '❌ You do not have permission to use this command.';
+            
+            if (['staff', 'blacklist', 'unblacklist', 'strike', 'viewstrikes', 'voice'].includes(interaction.commandName)) {
+                errorMsg += ' You need the "Role Perms" role, +_+ role, or be the allowed user.';
+            } else if (interaction.commandName === 'check') {
+                errorMsg += ' You need to be in the support team.';
+            } else if (['tebexsync', 'tebexstats'].includes(interaction.commandName)) {
+                errorMsg += ' You need administrator permissions.';
+            }
+            
             return interaction.reply({ 
-                content: '❌ You do not have permission to use this command. You need the "Role Perms" role or +_+ role.',
+                content: errorMsg,
                 ephemeral: true 
             });
         }
         
+        // Handle all commands
         if (interaction.commandName === 'staff') {
             await handleStaffCommand(interaction);
         } else if (interaction.commandName === 'blacklist') {
@@ -808,11 +1421,27 @@ client.on('interactionCreate', async interaction => {
             await handleViewStrikesCommand(interaction);
         } else if (interaction.commandName === 'voice') {
             await handleVoiceCommand(interaction);
+        } else if (interaction.commandName === 'claim') {
+            await handleClaimCommand(interaction);
+        } else if (interaction.commandName === 'purchases') {
+            await handlePurchasesCommand(interaction);
+        } else if (interaction.commandName === 'check') {
+            await handleCheckCommand(interaction);
+        } else if (interaction.commandName === 'tebexstats') {
+            await handleTebexStatsCommand(interaction);
+        } else if (interaction.commandName === 'tebexsync') {
+            await handleTebexSyncCommand(interaction);
         }
+    } else if (interaction.isButton()) {
+        await handleButtonClick(interaction);
+    } else if (interaction.isModalSubmit()) {
+        await handleModalSubmit(interaction);
     }
 });
 
-// Handle /staff command
+// ============================
+// COMMAND HANDLERS - STAFF MANAGEMENT
+// ============================
 async function handleStaffCommand(interaction) {
     const targetUser = interaction.options.getUser('user');
     const rank = interaction.options.getString('rank');
@@ -918,7 +1547,6 @@ async function handleStaffCommand(interaction) {
     }
 }
 
-// Handle /blacklist command
 async function handleBlacklistCommand(interaction) {
     const targetUser = interaction.options.getUser('user');
     const reason = interaction.options.getString('reason') || 'No reason provided';
@@ -966,7 +1594,6 @@ async function handleBlacklistCommand(interaction) {
     }
 }
 
-// Handle /unblacklist command
 async function handleUnblacklistCommand(interaction) {
     const targetUser = interaction.options.getUser('user');
     const reason = interaction.options.getString('reason') || 'No reason provided';
@@ -1014,7 +1641,6 @@ async function handleUnblacklistCommand(interaction) {
     }
 }
 
-// Handle /strike command
 async function handleStrikeCommand(interaction) {
     const targetUser = interaction.options.getUser('user');
     const reason = interaction.options.getString('reason') || 'No reason provided';
@@ -1071,7 +1697,6 @@ async function handleStrikeCommand(interaction) {
     }
 }
 
-// Handle /viewstrikes command
 async function handleViewStrikesCommand(interaction) {
     const targetUser = interaction.options.getUser('user') || interaction.user;
     
@@ -1107,17 +1732,8 @@ async function handleViewStrikesCommand(interaction) {
     }
 }
 
-// Handle /voice command
 async function handleVoiceCommand(interaction) {
     const action = interaction.options.getString('action');
-    
-    // Only allowed users can control voice
-    if (!hasPermission(interaction.member)) {
-        return interaction.reply({ 
-            content: '❌ You do not have permission to control the voice connection.',
-            ephemeral: true 
-        });
-    }
     
     try {
         await interaction.deferReply({ ephemeral: true });
@@ -1171,6 +1787,337 @@ async function handleVoiceCommand(interaction) {
         await interaction.editReply({ 
             content: '❌ An error occurred while processing the voice command.' 
         });
+    }
+}
+
+// ============================
+// COMMAND HANDLERS - TEBEX
+// ============================
+async function handleClaimCommand(interaction) {
+    const tebexId = interaction.options.getString('tebex_id');
+    
+    await interaction.deferReply({ ephemeral: true });
+    
+    const result = await claimTebexId(interaction, tebexId);
+    
+    if (result.success) {
+        const embed = createClaimEmbed(
+            result.tebexId,
+            interaction.user,
+            result.totalSpent,
+            result.purchases.length
+        );
+        
+        // Also send to log channel
+        const logChannel = await interaction.client.channels.fetch(TEBEX_LOG_CHANNEL_ID);
+        if (logChannel) {
+            await logChannel.send({ embeds: [embed] });
+        }
+        
+        await interaction.editReply({
+            embeds: [embed],
+            content: null
+        });
+    } else {
+        await interaction.editReply({
+            content: result.error,
+            embeds: []
+        });
+    }
+}
+
+async function handlePurchasesCommand(interaction) {
+    const targetUser = interaction.options.getUser('user');
+    const tebexId = interaction.options.getString('tebex_id');
+    
+    // Check permissions for viewing other users' purchases
+    if ((targetUser || tebexId) && !hasPermission(interaction.member, 'tebexstats')) {
+        return interaction.reply({ 
+            content: '❌ You need administrator permissions to view other users\' purchases.',
+            ephemeral: true 
+        });
+    }
+    
+    await interaction.deferReply({ ephemeral: !(targetUser || tebexId) });
+    
+    try {
+        let purchases = [];
+        let user = targetUser || interaction.user;
+        let targetTebexId = tebexId;
+        
+        if (tebexId) {
+            // Get purchases by Tebex ID
+            purchases = await db.all(
+                'SELECT * FROM purchases WHERE tebex_id = ? ORDER BY purchase_date DESC',
+                [tebexId]
+            );
+            targetTebexId = tebexId;
+        } else if (targetUser) {
+            // Get purchases by Discord ID
+            const link = await db.get(
+                'SELECT tebex_id FROM tebex_links WHERE discord_id = ?',
+                [targetUser.id]
+            );
+            
+            if (link) {
+                purchases = await db.all(
+                    'SELECT * FROM purchases WHERE discord_id = ? OR tebex_id = ? ORDER BY purchase_date DESC',
+                    [targetUser.id, link.tebex_id]
+                );
+                targetTebexId = link.tebex_id;
+            } else {
+                purchases = await db.all(
+                    'SELECT * FROM purchases WHERE discord_id = ? ORDER BY purchase_date DESC',
+                    [targetUser.id]
+                );
+            }
+        } else {
+            // Get user's own purchases
+            const link = await db.get(
+                'SELECT tebex_id FROM tebex_links WHERE discord_id = ?',
+                [interaction.user.id]
+            );
+            
+            if (link) {
+                purchases = await db.all(
+                    'SELECT * FROM purchases WHERE discord_id = ? OR tebex_id = ? ORDER BY purchase_date DESC',
+                    [interaction.user.id, link.tebex_id]
+                );
+                targetTebexId = link.tebex_id;
+            } else {
+                purchases = await db.all(
+                    'SELECT * FROM purchases WHERE discord_id = ? ORDER BY purchase_date DESC',
+                    [interaction.user.id]
+                );
+            }
+        }
+        
+        if (purchases.length === 0) {
+            return interaction.editReply({
+                content: '📭 No purchases found for this user.'
+            });
+        }
+        
+        const totalSpent = purchases.reduce((sum, p) => sum + (p.price || 0), 0);
+        const embed = createStatsEmbed(user, targetTebexId || 'Not linked', purchases, totalSpent);
+        
+        await interaction.editReply({ embeds: [embed] });
+        
+    } catch (error) {
+        console.error('Error handling purchases command:', error);
+        await interaction.editReply({
+            content: '❌ An error occurred while fetching purchase history.'
+        });
+    }
+}
+
+async function handleCheckCommand(interaction) {
+    const tebexId = interaction.options.getString('tebex_id');
+    
+    await interaction.deferReply();
+    
+    try {
+        // Get player info from Tebex
+        const playerInfo = await getPlayerInfo(tebexId);
+        
+        if (!playerInfo) {
+            return interaction.editReply({
+                content: `❌ Could not find information for Tebex ID: \`${tebexId}\``
+            });
+        }
+        
+        // Check if linked to Discord
+        let discordUser = null;
+        const link = await db.get(
+            'SELECT discord_id FROM tebex_links WHERE tebex_id = ?',
+            [tebexId]
+        );
+        
+        if (link) {
+            try {
+                discordUser = await interaction.client.users.fetch(link.discord_id);
+            } catch (error) {
+                // User not found, that's okay
+            }
+        }
+        
+        // Get purchase history
+        const purchases = await db.all(
+            'SELECT * FROM purchases WHERE tebex_id = ? ORDER BY purchase_date DESC',
+            [tebexId]
+        );
+        
+        const embed = createCheckEmbed(tebexId, playerInfo, discordUser, purchases);
+        await interaction.editReply({ embeds: [embed] });
+        
+    } catch (error) {
+        console.error('Error handling check command:', error);
+        await interaction.editReply({
+            content: '❌ An error occurred while checking the Tebex ID.'
+        });
+    }
+}
+
+async function handleTebexStatsCommand(interaction) {
+    await interaction.deferReply();
+    
+    try {
+        // Get overall stats
+        const totalStats = await db.get(`
+            SELECT 
+                COUNT(*) as total_purchases,
+                SUM(price) as total_revenue,
+                COUNT(DISTINCT tebex_id) as unique_customers,
+                COUNT(DISTINCT discord_id) as linked_accounts
+            FROM purchases
+            WHERE status = 'Complete'
+        `);
+        
+        // Get today's stats
+        const today = new Date();
+        today.setHours(0, 0, 0, 0);
+        
+        const todayStats = await db.get(`
+            SELECT 
+                COUNT(*) as today_purchases,
+                SUM(price) as today_revenue
+            FROM purchases
+            WHERE status = 'Complete' AND date(purchase_date) >= date(?)
+        `, [today.toISOString()]);
+        
+        // Get top packages
+        const topPackages = await db.all(`
+            SELECT package_name, COUNT(*) as count, SUM(price) as revenue
+            FROM purchases
+            WHERE status = 'Complete'
+            GROUP BY package_name
+            ORDER BY revenue DESC
+            LIMIT 5
+        `);
+        
+        const embed = new EmbedBuilder()
+            .setColor(0x9B59B6)
+            .setTitle('📊 Tebex Store Statistics')
+            .addFields(
+                { name: '💰 Total Revenue', value: `$${(totalStats.total_revenue || 0).toFixed(2)}`, inline: true },
+                { name: '📦 Total Purchases', value: `${totalStats.total_purchases || 0}`, inline: true },
+                { name: '👥 Unique Customers', value: `${totalStats.unique_customers || 0}`, inline: true },
+                { name: '🔗 Linked Accounts', value: `${totalStats.linked_accounts || 0}`, inline: true },
+                { name: '📈 Today\'s Revenue', value: `$${(todayStats.today_revenue || 0).toFixed(2)}`, inline: true },
+                { name: '🛍️ Today\'s Purchases', value: `${todayStats.today_purchases || 0}`, inline: true }
+            )
+            .setTimestamp();
+        
+        if (topPackages.length > 0) {
+            const packageList = topPackages.map((pkg, i) => 
+                `**${i + 1}.** ${pkg.package_name} - ${pkg.count} sales ($${pkg.revenue.toFixed(2)})`
+            ).join('\n');
+            
+            embed.addFields({ 
+                name: '🏆 Top Packages', 
+                value: packageList,
+                inline: false 
+            });
+        }
+        
+        await interaction.editReply({ embeds: [embed] });
+        
+    } catch (error) {
+        console.error('Error handling stats command:', error);
+        await interaction.editReply({
+            content: '❌ An error occurred while fetching statistics.'
+        });
+    }
+}
+
+async function handleTebexSyncCommand(interaction) {
+    await interaction.deferReply({ ephemeral: true });
+    
+    try {
+        await syncRecentPurchases(interaction.client);
+        await interaction.editReply({
+            content: '✅ Successfully synced purchases from Tebex.'
+        });
+    } catch (error) {
+        console.error('Error syncing purchases:', error);
+        await interaction.editReply({
+            content: '❌ An error occurred while syncing purchases.'
+        });
+    }
+}
+
+// ============================
+// BUTTON HANDLER
+// ============================
+async function handleButtonClick(interaction) {
+    if (interaction.customId.startsWith('claim_')) {
+        const transactionId = interaction.customId.replace('claim_', '');
+        
+        // Create modal for Tebex ID input
+        const modal = new ModalBuilder()
+            .setCustomId(`claim_modal_${transactionId}`)
+            .setTitle('Claim Purchase');
+        
+        const tebexIdInput = new TextInputBuilder()
+            .setCustomId('tebex_id')
+            .setLabel('Your Tebex/Minecraft Username')
+            .setStyle(TextInputStyle.Short)
+            .setRequired(true)
+            .setMaxLength(32);
+        
+        const row = new ActionRowBuilder().addComponents(tebexIdInput);
+        modal.addComponents(row);
+        
+        await interaction.showModal(modal);
+    }
+}
+
+// ============================
+// MODAL SUBMIT HANDLER
+// ============================
+async function handleModalSubmit(interaction) {
+    if (interaction.customId.startsWith('claim_modal_')) {
+        const transactionId = interaction.customId.replace('claim_modal_', '');
+        const tebexId = interaction.fields.getTextInputValue('tebex_id');
+        
+        await interaction.deferReply({ ephemeral: true });
+        
+        const result = await claimTebexId(interaction, tebexId);
+        
+        if (result.success) {
+            // Update the original message
+            try {
+                const originalMessage = await interaction.channel.messages.fetch(interaction.message.id);
+                const purchase = await db.get(
+                    'SELECT * FROM purchases WHERE transaction_id = ?',
+                    [transactionId]
+                );
+                
+                if (purchase && originalMessage) {
+                    const embed = createPurchaseEmbed(purchase, interaction.user);
+                    await originalMessage.edit({ embeds: [embed], components: [] });
+                }
+            } catch (error) {
+                console.error('Error updating original message:', error);
+            }
+            
+            const embed = createClaimEmbed(
+                result.tebexId,
+                interaction.user,
+                result.totalSpent,
+                result.purchases.length
+            );
+            
+            await interaction.editReply({
+                embeds: [embed],
+                content: null
+            });
+        } else {
+            await interaction.editReply({
+                content: result.error,
+                embeds: []
+            });
+        }
     }
 }
 
