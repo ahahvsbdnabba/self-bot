@@ -3,7 +3,7 @@ const { Client, GatewayIntentBits, EmbedBuilder, SlashCommandBuilder, Permission
 // ============================
 // CONFIGURATION - EDIT THESE
 // ============================
-const BOT_TOKEN = 'YOUR_BOT_TOKEN_HERE'; // Replace with your bot token
+const BOT_TOKEN = 'MTUwMTI3NTE2NDc2MTkxOTU4OQ.GrKF0l.zB5WxeQFGeNfk8K692AecU9g8TErDVnaNO8t3Q'; // Replace with your bot token
 const ALLOWED_USER_ID = '1350293413915918367'; // User who can always run command
 const LOG_CHANNEL_ID = '1482790191407173733'; // Channel for role assignment logs
 const BLACKLIST_LOG_CHANNEL_ID = '1482790260432961650'; // Channel for blacklist logs
