@@ -32,9 +32,7 @@ class SelfBot(discord.Client):
         
         content = message.content.lower()
         
-        # Auto-delete command message after 3 seconds
-        asyncio.create_task(self.delete_after(message, 3))
-        
+        # Only process commands with prefix .
         if not content.startswith('.'):
             return
         
@@ -44,6 +42,7 @@ class SelfBot(discord.Client):
             if cmd == 'ping':
                 msg = await message.channel.send('🚀 **Pong!**')
                 asyncio.create_task(self.delete_after(msg, 3))
+                asyncio.create_task(self.delete_after(message, 3))
             
             elif cmd == 'help':
                 help_text = """
@@ -56,6 +55,7 @@ class SelfBot(discord.Client):
                 """
                 msg = await message.channel.send(help_text)
                 asyncio.create_task(self.delete_after(msg, 10))
+                asyncio.create_task(self.delete_after(message, 3))
             
             elif cmd == 'clear':
                 count = 10
@@ -67,6 +67,7 @@ class SelfBot(discord.Client):
                 deleted = await self.clear_messages(message.channel, count)
                 msg = await message.channel.send(f'🗑️ Deleted {len(deleted)} messages')
                 asyncio.create_task(self.delete_after(msg, 3))
+                asyncio.create_task(self.delete_after(message, 3))
             
             elif cmd == 'status':
                 status_text = 'online'
@@ -75,17 +76,20 @@ class SelfBot(discord.Client):
                 await self.change_presence(activity=discord.Game(name=status_text))
                 msg = await message.channel.send(f'✅ Status: **{status_text}**')
                 asyncio.create_task(self.delete_after(msg, 3))
+                asyncio.create_task(self.delete_after(message, 3))
             
             elif cmd == 'invisible':
                 await self.change_presence(status=discord.Status.invisible)
                 msg = await message.channel.send('👻 **Invisible ON**')
                 asyncio.create_task(self.delete_after(msg, 3))
+                asyncio.create_task(self.delete_after(message, 3))
             
             elif cmd == 'servers':
                 servers = [f"• {guild.name}" for guild in self.guilds[:15]]
                 server_text = f"📡 **{len(self.guilds)} servers:**\n" + "\n".join(servers)
                 msg = await message.channel.send(server_text)
                 asyncio.create_task(self.delete_after(msg, 10))
+                asyncio.create_task(self.delete_after(message, 3))
                 
         except Exception as e:
             error_msg = await message.channel.send(f'❌ Error: {str(e)}')
