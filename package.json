@@ -1,18 +1,17 @@
 {
-  "name": "staff-purchase-bot",
-  "version": "2.0.0",
-  "description": "Combined staff management and Tebex purchase logging bot",
+  "name": "discord-selfbot-python",
+  "version": "1.0.0",
+  "description": "Python Discord self-bot on Railway",
   "main": "bot.js",
   "scripts": {
-    "start": "node bot.js"
-  },
-  "dependencies": {
-    "discord.js": "^14.16.3",
-    "axios": "^1.7.2",
-    "sqlite3": "^5.1.7",
-    "sqlite": "^5.1.1"
+    "start": "python bot.js",
+    "install": "pip install -r requirements.txt"
   },
   "engines": {
-    "node": ">=18.0.0"
+    "node": ">=18.0.0",
+    "npm": ">=9.0.0"
+  },
+  "dependencies": {
+    "python-shell": "^5.0.0"
   }
 }
