@@ -4,35 +4,23 @@ import aiohttp
 import os
 import sys
 import gc
-
-# Fix aiohttp issues
-if 'aiohttp' in sys.modules:
-    del sys.modules['aiohttp']
+from discord.ext import commands
 
 TOKEN = os.getenv('DISCORD_TOKEN')
 if not TOKEN or len(TOKEN) < 50:
-    print("❌ INVALID TOKEN FORMAT")
-    print("Must be ~59 chars, starts with letters/numbers")
+    print("❌ INVALID TOKEN")
     sys.exit(1)
 
-print(f"🔥 Token loaded: {len(TOKEN)} chars")
+print(f"🔥 Self-bot ready: {len(TOKEN)} chars")
 
-class UltimateSelfBot(discord.Client):
+intents = discord.Intents.default()
+intents.message_content = True
+
+class UltimateSelfBot(commands.Bot):
     def __init__(self):
-        # Perfect connector - no errors
-        connector = aiohttp.TCPConnector(
-            limit=10,
-            limit_per_host=5,
-            force_close=True,
-            enable_cleanup_closed=True
-        )
-        super().__init__(
-            intents=discord.Intents.all(),
-            connector=connector
-        )
+        super().__init__('!', intents=intents)
     
     async def test_token(self):
-        """Test token validity"""
         async with aiohttp.ClientSession() as session:
             async with session.get(
                 'https://discord.com/api/v9/users/@me',
@@ -40,134 +28,97 @@ class UltimateSelfBot(discord.Client):
             ) as resp:
                 if resp.status == 200:
                     data = await resp.json()
-                    print(f"✅ TOKEN VALID: {data.get('username')}#{data.get('discriminator')}")
+                    print(f"✅ VALID: {data.get('username')}#{data.get('discriminator')}")
                     return True
-                print(f"❌ HTTP {resp.status}: Invalid token")
-                return False
+        return False
     
     async def close(self):
-        """Clean shutdown"""
         try:
-            if self.http and self.http.session:
-                await self.http.session.close()
+            await self.http.session.close()
         except: pass
         await super().close()
-        gc.collect()
     
     async def on_ready(self):
         print(f"""
 ╔══════════════════════════════════════════════╗
-║                ✅ SELF-BOT LIVE               ║
+║                ✅ LIVE & READY               ║
 ║                                              ║
 ║ 👤 {self.user}                               ║
 ║ 🆔 {self.user.id}                            ║
 ║ 📡 {len(self.guilds)} servers                ║
-║                                              ║
-║ 🎯 DM COMMANDS: !ping !help !clear !status   ║
 ╚══════════════════════════════════════════════╝
         """)
         await self.change_presence(status=discord.Status.invisible)
     
+    @commands.command()
+    async def ping(self, ctx):
+        await ctx.message.edit(content='🚀 **100% WORKING!** 🏓')
+    
+    @commands.command()
+    async def help(self, ctx):
+        embed = discord.Embed(title="🔥 Self-Bot Commands", color=0x00ff00)
+        embed.add_field(name="!ping", value="Test connection", inline=False)
+        embed.add_field(name="!clear 10", value="Delete 10 messages", inline=False)
+        embed.add_field(name="!status coding", value="Set status", inline=False)
+        embed.add_field(name="!invisible", value="Go invisible", inline=False)
+        await ctx.message.edit(content=None, embed=embed)
+    
+    @commands.command()
+    async def clear(self, ctx, count: int = 10):
+        count = min(count, 100)
+        try:
+            deleted = await ctx.channel.purge(limit=count)
+            await ctx.send(f'🗑️ Deleted {len(deleted)}', delete_after=3)
+        except:
+            await ctx.send('❌ No permissions', delete_after=3)
+    
+    @commands.command()
+    async def status(self, ctx, *, status: str = "online"):
+        await self.change_presence(activity=discord.Game(name=status))
+        await ctx.message.edit(content=f'✅ Status: **{status}**')
+    
+    @commands.command()
+    async def invisible(self, ctx):
+        await self.change_presence(status=discord.Status.invisible)
+        await ctx.message.edit(content='👻 **Invisible ON**')
+    
+    @commands.command()
+    async def servers(self, ctx):
+        server_list = [f"• {guild.name}" for guild in self.guilds[:10]]
+        await ctx.message.edit(content=f"📡 **{len(self.guilds)} servers:**\n" + "\n".join(server_list))
+    
     async def on_message(self, message):
-        # Only respond to YOUR messages
         if message.author != self.user:
-            # Auto-react to mentions
-            if self.user.mentioned_in(message):
-                try:
-                    await message.add_reaction('✅')
-                except: pass
             return
         
-        cmd = message.content.lower().strip()
+        await self.process_commands(message)
         
-        # !ping
-        if '!ping' in cmd:
-            await message.edit(content='🚀 **SELF-BOT 100% WORKING!** 🏓')
-        
-        # !help
-        elif '!help' in cmd:
-            help_text = '''🔥 **ULTIMATE SELF-BOT COMMANDS**
-
-`!ping`           Test connection
-`!help`           This help
-`!clear 20`       Delete 20 messages  
-`!status coding`  Set custom status
-`!invisible`      Go invisible
-`!servers`        List servers
-`!test`           Check token
-`!cleanup`        Clean memory'''
-            await message.edit(content=help_text)
-        
-        # !clear
-        elif '!clear' in cmd:
-            try:
-                count = 10
-                parts = cmd.split()
-                if len(parts) > 1:
-                    count = min(int(parts[1]), 100)
-                deleted = await message.channel.purge(limit=count)
-                await message.channel.send(f'🗑️ **Deleted {len(deleted)}**', delete_after=3)
-            except Exception as e:
-                await message.reply(f'❌ **Error:** {str(e)[:50]}')
-        
-        # !status
-        elif '!status' in cmd:
-            status_text = 'online'
-            parts = cmd.split(' ', 1)
-            if len(parts) > 1:
-                status_text = parts[1][:50]
-            await self.change_presence(activity=discord.Game(name=status_text))
-            await message.edit(content=f'✅ **Status:** {status_text}')
-        
-        # !invisible
-        elif '!invisible' in cmd:
-            await self.change_presence(status=discord.Status.invisible)
-            await message.edit(content='👻 **Invisible mode ON**')
-        
-        # !servers
-        elif '!servers' in cmd:
-            servers = [f'• {guild.name}' for guild in self.guilds[:15]]
-            server_list = '\n'.join(servers)
-            await message.edit(content=f'📡 **{len(self.guilds)} servers:**\n{server_list}')
-        
-        # !test
-        elif '!test' in cmd:
-            valid = await self.test_token()
-            await message.edit(content=f'🔍 **Token:** {"✅ VALID" if valid else "❌ INVALID"}')
-        
-        # !cleanup
-        elif '!cleanup' in cmd:
-            gc.collect()
-            await message.edit(content='🧹 **Memory cleaned**')
-        
-        # Auto-delete command after 3s
+        # Auto-delete
         await asyncio.sleep(3)
         try:
             await message.delete()
         except: pass
 
 async def main():
-    print("🚀 **Ultimate Self-Bot v2.0**")
+    print("🚀 **Ultimate Self-Bot**")
     
-    # Pre-test token
     bot = UltimateSelfBot()
+    
     if not await bot.test_token():
-        print("💥 Exiting - invalid token")
+        print("❌ Invalid token")
         return
     
+    # Use raw websocket connection
     try:
-        await bot.start(TOKEN)
-    except discord.LoginFailure:
-        print("❌ **LOGIN FAILED** - Token revoked")
-    except KeyboardInterrupt:
-        print("\n👋 Shutting down...")
+        await bot.start(TOKEN, bot=False)  # Self-bot mode
     except Exception as e:
-        print(f"💥 **ERROR:** {type(e).__name__}: {e}")
+        print(f"💥 Gateway error: {e}")
+        print("🔄 Trying legacy login...")
+        # Fallback
+        client = discord.Client(intents=intents)
+        await client.start(TOKEN)
     finally:
         await bot.close()
 
 if __name__ == '__main__':
-    try:
-        asyncio.run(main())
-    except KeyboardInterrupt:
-        print("👋 Exit")
+    asyncio.run(main())
