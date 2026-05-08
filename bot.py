@@ -31,6 +31,33 @@ class SelfBot(discord.Client):
         """)
         await self.change_presence(status=discord.Status.dnd)
 
+    async def send_long(self, channel_or_message, content, split_by=2000):
+        """Splits content into multiple messages if too long."""
+        if len(content) <= split_by:
+            await channel_or_message.reply(content)
+        else:
+            parts = []
+            while content:
+                if len(content) <= split_by:
+                    parts.append(content)
+                    break
+                # try to split at newline if possible
+                split_at = content.rfind('\n', 0, split_by)
+                if split_at == -1:
+                    split_at = split_by
+                parts.append(content[:split_at])
+                content = content[split_at:].strip()
+            for part in parts:
+                await channel_or_message.reply(part)
+
+    async def delete_trigger(self, message, delay=5):
+        """Deletes the trigger message after a delay."""
+        await asyncio.sleep(delay)
+        try:
+            await message.delete()
+        except:
+            pass
+
     async def on_message(self, message):
         # Handle auto-replies to OTHER users
         if message.author != self.user:
@@ -53,10 +80,13 @@ class SelfBot(discord.Client):
         cmd = content[1:].split()[0].lower()
         args = content[len(self.command_prefix)+len(cmd):].strip()
 
+        # Schedule deletion of the trigger message
+        asyncio.create_task(self.delete_trigger(message))
+
         try:
             # ── HELP ──
             if cmd == 'help':
-                help_text = """🔥 **Self-Bot Commands**
+                help1 = """🔥 **Self-Bot Commands (1/2)**
 Prefix: `.`
 
 **-- Basic --**
@@ -93,7 +123,9 @@ Prefix: `.`
 `.dog` - Random dog picture
 `.meme` - Random meme
 `.quote` - Random quote
-`.fact` - Random fact
+`.fact` - Random fact"""
+
+                help2 = """**-- Fun (cont.) --**
 `.hug @user` - Hug someone
 `.slap @user` - Slap someone
 `.say <text>` - Make me say something
@@ -132,7 +164,8 @@ Prefix: `.`
 `.stealemoji <emoji>` - Add custom emoji to server
 `.roleadd @user @role` - Add role
 `.roleremove @user @role` - Remove role"""
-                await message.reply(help_text)
+                await self.send_long(message, help1)
+                await self.send_long(message, help2)
 
             # ── ReplyMention ──
             elif cmd == 'replymention':
@@ -161,7 +194,7 @@ Prefix: `.`
                         await message.reply("No auto-replies set.")
                     else:
                         lines = [f"• `{k}` → {v[:50]}{'...' if len(v)>50 else ''}" for k, v in self.auto_replies.items()]
-                        await message.reply(f"**Auto-replies ({len(self.auto_replies)}):**\n" + "\n".join(lines))
+                        await self.send_long(message, f"**Auto-replies ({len(self.auto_replies)}):**\n" + "\n".join(lines))
                 elif action == 'remove':
                     if len(parts) < 2:
                         await message.reply("Usage: `.autoreply remove <trigger>`")
@@ -214,7 +247,7 @@ Prefix: `.`
                 for _ in range(count):
                     await message.channel.send(target.mention)
                     await asyncio.sleep(0.3)
-                await message.delete()
+                # No need to delete trigger; already scheduled
 
             # ── DM ──
             elif cmd == 'dm':
@@ -373,7 +406,8 @@ Prefix: `.`
             # ── Guilds ──
             elif cmd == 'guilds':
                 guilds = [f"• {g.name} ({g.member_count})" for g in self.guilds[:20]]
-                await message.reply(f"**📡 Servers ({len(self.guilds)})**\n" + "\n".join(guilds))
+                msg = f"**📡 Servers ({len(self.guilds)})**\n" + "\n".join(guilds)
+                await self.send_long(message, msg)
 
             # ── Channelinfo ──
             elif cmd == 'channelinfo':
@@ -528,7 +562,7 @@ Prefix: `.`
                 async with session.get('https://meme-api.com/gimme') as resp:
                     if resp.status == 200:
                         data = await resp.json()
-                        await message.reply(f"**{data['title']}**\n{data['url']}")
+                        await self.send_long(message, f"**{data['title']}**\n{data['url']}")
                     else:
                         await message.reply("Couldn't fetch a meme.")
         elif cmd == 'quote':
@@ -613,7 +647,7 @@ Prefix: `.`
                 msg = f"📋 **{len(roles)} roles:**\n"
             for role in roles:
                 msg += f"`{role.name}` | `{role.id}` | `#{role.color.value:06x}`\n"
-            await message.reply(msg)
+            await self.send_long(message, msg)
         elif cmd == 'emoji':
             if not message.guild:
                 await message.reply("❌ Only works in a server.")
@@ -623,7 +657,8 @@ Prefix: `.`
                 await message.reply("No custom emojis.")
                 return
             lines = [f"{emoji} `:{emoji.name}:`" for emoji in emojis[:30]]
-            await message.reply(f"**{len(emojis)} custom emojis:**\n" + "\n".join(lines))
+            msg = f"**{len(emojis)} custom emojis:**\n" + "\n".join(lines)
+            await self.send_long(message, msg)
         elif cmd == 'weather':
             await message.reply(f"🌤️ Weather for **{args or 'Unknown'}** – placeholder.")
         elif cmd == 'define':
