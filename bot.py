@@ -16,7 +16,8 @@ class SelfBot(discord.Client):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.command_prefix = '.'
-        self.auto_replies = {}  # trigger -> response
+        self.auto_replies = {}       # trigger -> response
+        self.mention_reply = None   # custom mention reply message (None = disabled)
     
     async def on_ready(self):
         print(f"""
@@ -28,13 +29,19 @@ class SelfBot(discord.Client):
 ║ 📡 {len(self.guilds)} servers                ║
 ╚══════════════════════════════════════════════╝
         """)
-        await self.change_presence(status=discord.Status.invisible)
+        # Set DND status on startup
+        await self.change_presence(status=discord.Status.dnd)
     
     async def on_message(self, message):
         if message.author == self.user:
             return
-     
-        # Custom auto-replies
+        
+        # Custom mention reply (if set via .replymention)
+        if self.mention_reply and self.user in message.mentions:
+            await message.reply(self.mention_reply)
+            return
+        
+        # Custom auto-replies (trigger-based)
         content_lower = message.content.lower().strip()
         for trigger, response in self.auto_replies.items():
             if trigger in content_lower:
@@ -64,11 +71,13 @@ class SelfBot(discord.Client):
 `.report <text>` - Report an issue
 `.bug <desc>` - Report a bug
 """, inline=False)
-                embed.add_field(name="-- AutoReply --", value="""
+                embed.add_field(name="-- AutoReply & Mention --", value="""
 `.autoreply <trigger> | <response>` - Set custom auto-reply
 `.autoreply list` - List all auto-replies
 `.autoreply remove <trigger>` - Remove one
 `.autoreply clear` - Clear all
+`.replymention <message>` - Set mention reply
+`.replymention off` - Disable mention reply
 """, inline=False)
                 embed.add_field(name="-- Ping & DM --", value="""
 `.pinguser @user <msg>` - Ping user with message
@@ -105,7 +114,7 @@ class SelfBot(discord.Client):
 `.guilds` - List all servers
 """, inline=False)
                 embed.add_field(name="-- Utility --", value="""
-`.weather <city>` - Weather info
+`.weather <city>` - Weather info (placeholder)
 `.define <word>` - Dictionary definition
 `.urban <term>` - Urban Dictionary
 `.translate <lang> | <text>` - Translate (placeholder)
@@ -130,6 +139,21 @@ class SelfBot(discord.Client):
 """, inline=False)
                 embed.set_footer(text="Bot by h61g")
                 await message.reply(embed=embed, delete_after=60)
+            
+            # ── ReplyMention ──
+            elif cmd == 'replymention':
+                if not args:
+                    if self.mention_reply:
+                        await message.reply(f"Current mention reply: \"{self.mention_reply}\"\nUse `.replymention <message>` to change, or `.replymention off` to disable.")
+                    else:
+                        await message.reply("No mention reply set. Use `.replymention <message>` to enable it.")
+                    return
+                if args.lower().strip() == 'off':
+                    self.mention_reply = None
+                    await message.reply("✅ Mention reply disabled.")
+                else:
+                    self.mention_reply = args.strip()
+                    await message.reply(f"✅ Mention reply set to: \"{self.mention_reply[:100]}{'...' if len(self.mention_reply)>100 else ''}\"")
             
             # ── AutoReply System ──
             elif cmd == 'autoreply':
@@ -428,9 +452,8 @@ class SelfBot(discord.Client):
                 except:
                     await message.reply("❌ Cannot remove role.")
             
-            # ── Existing commands (ping, 8ball, etc.) ──
+            # ── Existing commands ──
             elif cmd in ('ping', '8ball', 'joke', 'coinflip', 'roll', 'choose', 'rps', 'cat', 'dog', 'meme', 'quote', 'fact', 'hug', 'slap', 'say', 'embed', 'avatar', 'serverinfo', 'userinfo', 'roleinfo', 'viewrole', 'emoji', 'weather', 'define', 'urban', 'translate', 'shorten', 'qr', 'timer', 'remind', 'poll', 'clear', 'purge', 'invite', 'feedback', 'report', 'bug'):
-                # Map to the existing function
                 await self.handle_old_commands(message, cmd, args)
             
             else:
@@ -441,12 +464,12 @@ class SelfBot(discord.Client):
             await message.channel.send(f'❌ Error: {str(e)}', delete_after=10)
     
     async def handle_old_commands(self, message, cmd, args):
-        """Reuse your previous command logic here."""
+        """Reuse previous command logic – same as before."""
         if cmd == 'ping':
             await message.reply('🚀 **Pong!**')
         elif cmd == '8ball':
             if not args:
-                await message.reply("❌ Ask a question! `.8ball Will I win?`")
+                await message.reply("❌ Ask a question!")
                 return
             responses = [
                 "🎱 It is certain.", "🎱 It is decidedly so.", "🎱 Without a doubt.",
@@ -734,7 +757,7 @@ class SelfBot(discord.Client):
         elif cmd == 'bug':
             await message.reply(f"🐛 Bug reported: *{args or 'empty'}*")
         else:
-            await message.reply(f"❌ Unknown command `{cmd}`.")  # Should not reach
+            await message.reply(f"❌ Unknown command `{cmd}`.")
     
     async def clear_messages(self, channel, limit=10):
         deleted = []
