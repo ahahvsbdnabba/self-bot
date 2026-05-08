@@ -16,7 +16,7 @@ class SelfBot(discord.Client):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.command_prefix = '.'
-        self.auto_replies = {}  # dict: trigger_lower -> response
+        self.auto_replies = {}  # trigger -> response
     
     async def on_ready(self):
         print(f"""
@@ -31,21 +31,15 @@ class SelfBot(discord.Client):
         await self.change_presence(status=discord.Status.invisible)
     
     async def on_message(self, message):
-        # Ignore own messages for processing commands (except mention reply)
         if message.author == self.user:
             return
-        
-        # Auto-reply when mentioned (but not if you already have an autoreply for that)
-        if self.user in message.mentions:
-            await message.reply("Hello, I will be with you shortly!")
-            return
-        
-        # Auto-replies (trigger-based)
+     
+        # Custom auto-replies
         content_lower = message.content.lower().strip()
         for trigger, response in self.auto_replies.items():
             if trigger in content_lower:
                 await message.reply(response)
-                return  # only one autoreply per message
+                return
         
         # Command processing
         if not content_lower.startswith(self.command_prefix):
@@ -55,10 +49,97 @@ class SelfBot(discord.Client):
         args = message.content[len(self.command_prefix)+len(cmd):].strip()
         
         try:
+            # ── HELP ──
+            if cmd == 'help':
+                embed = discord.Embed(
+                    title="🔥 Self-Bot Commands",
+                    description="Prefix: `.`",
+                    color=0x00ff00
+                )
+                embed.add_field(name="-- Basic --", value="""
+`.ping` - Test connection
+`.help` - This menu
+`.invite` - Bot invite
+`.feedback <text>` - Send feedback
+`.report <text>` - Report an issue
+`.bug <desc>` - Report a bug
+""", inline=False)
+                embed.add_field(name="-- AutoReply --", value="""
+`.autoreply <trigger> | <response>` - Set custom auto-reply
+`.autoreply list` - List all auto-replies
+`.autoreply remove <trigger>` - Remove one
+`.autoreply clear` - Clear all
+""", inline=False)
+                embed.add_field(name="-- Ping & DM --", value="""
+`.pinguser @user <msg>` - Ping user with message
+`.massping <count> @user` - Ping user multiple times (max 10)
+`.dm @user <msg>` - Send DM
+`.everyone <msg>` - @everyone ping
+`.mentionrole <role> <msg>` - Ping a role
+""", inline=False)
+                embed.add_field(name="-- Fun --", value="""
+`.8ball <question>` - Magic 8ball
+`.joke` - Random joke
+`.coinflip` - Flip a coin
+`.roll <max>` - Roll a dice (default 100)
+`.choose <a | b | c>` - Choose between options
+`.rps <rock|paper|scissors>` - Play RPS
+`.cat` - Random cat picture
+`.dog` - Random dog picture
+`.meme` - Random meme
+`.quote` - Random quote
+`.fact` - Random fact
+`.hug @user` - Hug someone
+`.slap @user` - Slap someone
+`.say <text>` - Make me say something
+`.embed <title> | <desc>` - Create an embed
+""", inline=False)
+                embed.add_field(name="-- Info --", value="""
+`.avatar @user` - Get avatar
+`.serverinfo` - Server info
+`.userinfo @user` - User info
+`.channelinfo` - Current channel info
+`.roleinfo <role>` - Role info
+`.viewrole` - All roles in server
+`.emoji` - List all server emojis
+`.guilds` - List all servers
+""", inline=False)
+                embed.add_field(name="-- Utility --", value="""
+`.weather <city>` - Weather info
+`.define <word>` - Dictionary definition
+`.urban <term>` - Urban Dictionary
+`.translate <lang> | <text>` - Translate (placeholder)
+`.shorten <url>` - Shorten URL (placeholder)
+`.qr <text>` - Generate QR code (placeholder)
+`.timer <seconds>` - Set a timer
+`.remind <min> | <text>` - Reminder
+`.poll <Q> | <opt1> | <opt2>` - Create a poll
+`.clear <count>` - Delete your messages
+`.purge <count>` - Same as clear
+""", inline=False)
+                embed.add_field(name="-- Mod / Server --", value="""
+`.nick <name>` - Change your nickname
+`.slowmode <sec>` - Set channel slowmode
+`.topic <text>` - Change channel topic
+`.rename <name>` - Rename channel
+`.react <emoji>` - React to last bot message
+`.copy @user` - Copy user's last message
+`.stealemoji <emoji>` - Add custom emoji to server
+`.roleadd @user @role` - Add role
+`.roleremove @user @role` - Remove role
+""", inline=False)
+                embed.set_footer(text="Bot by h61g")
+                await message.reply(embed=embed, delete_after=60)
+            
             # ── AutoReply System ──
-            if cmd == 'autoreply':
+            elif cmd == 'autoreply':
                 if not args:
-                    await self.show_help(message, 'autoreply')
+                    embed = discord.Embed(title="AutoReply Commands", color=0x00ff00)
+                    embed.add_field(name="Set", value="`.autoreply trigger | response`", inline=False)
+                    embed.add_field(name="List", value="`.autoreply list`", inline=False)
+                    embed.add_field(name="Remove", value="`.autoreply remove <trigger>`", inline=False)
+                    embed.add_field(name="Clear", value="`.autoreply clear`", inline=False)
+                    await message.reply(embed=embed)
                     return
                 parts = args.split('|', 1)
                 action = parts[0].strip().lower()
@@ -66,8 +147,8 @@ class SelfBot(discord.Client):
                     if not self.auto_replies:
                         await message.reply("No auto-replies set.")
                     else:
-                        reply_list = "\n".join([f"• `{k}` → {v[:50]}" for k, v in self.auto_replies.items()])
-                        await message.reply(f"**Auto-replies ({len(self.auto_replies)}):**\n{reply_list}")
+                        lines = [f"• `{k}` → {v[:50]}{'...' if len(v)>50 else ''}" for k, v in self.auto_replies.items()]
+                        await message.reply(f"**Auto-replies ({len(self.auto_replies)}):**\n" + "\n".join(lines))
                 elif action == 'remove':
                     if len(parts) < 2:
                         await message.reply("Usage: `.autoreply remove <trigger>`")
@@ -82,7 +163,6 @@ class SelfBot(discord.Client):
                     self.auto_replies.clear()
                     await message.reply("✅ All auto-replies cleared.")
                 else:
-                    # Set new autoreply: trigger | response
                     if len(parts) < 2:
                         await message.reply("Usage: `.autoreply <trigger> | <response>`")
                         return
@@ -91,19 +171,16 @@ class SelfBot(discord.Client):
                     self.auto_replies[trigger] = response
                     await message.reply(f"✅ Auto-reply set: `{trigger}` → \"{response[:50]}{'...' if len(response)>50 else ''}\"")
             
-            # ── Ping / PingUser ──
-            elif cmd in ('pinguser', 'ping'):
+            # ── PingUser ──
+            elif cmd == 'pinguser':
                 if not message.mentions:
                     await message.reply("❌ Mention someone! `.pinguser @user Hello`")
                     return
                 user = message.mentions[0]
-                ping_msg = args.replace(message.mentions[0].mention, '').strip() if message.mentions else ''
-                if ping_msg:
-                    await message.channel.send(f"{user.mention} {ping_msg}")
-                else:
-                    await message.channel.send(f"{user.mention}")
+                msg = args.replace(message.mentions[0].mention, '').strip() if message.mentions else ''
+                await message.channel.send(f"{user.mention} {msg}" if msg else user.mention)
             
-            # ── Massping ──
+            # ── MassPing ──
             elif cmd == 'massping':
                 parts = args.split()
                 if len(parts) < 2:
@@ -114,30 +191,30 @@ class SelfBot(discord.Client):
                 except:
                     await message.reply("❌ Invalid count.")
                     return
-                target = message.mentions[0] if message.mentions else None
-                if not target:
+                if not message.mentions:
                     await message.reply("❌ Mention someone.")
                     return
+                target = message.mentions[0]
                 if count > 10:
                     await message.reply("❌ Max 10 pings allowed.")
                     return
                 for _ in range(count):
-                    await message.channel.send(f"{target.mention}")
+                    await message.channel.send(target.mention)
                     await asyncio.sleep(0.3)
                 await message.delete()
             
             # ── DM ──
             elif cmd == 'dm':
                 if not message.mentions:
-                    await message.reply("❌ Mention someone! `.dm @user hello`")
+                    await message.reply("❌ Mention someone! `.dm @user message`")
                     return
                 user = message.mentions[0]
-                dm_text = args.replace(message.mentions[0].mention, '').strip()
-                if not dm_text:
+                text = args.replace(user.mention, '').strip()
+                if not text:
                     await message.reply("❌ Add a message.")
                     return
                 try:
-                    await user.send(dm_text)
+                    await user.send(text)
                     await message.reply(f"✉️ DM sent to {user.mention}")
                 except:
                     await message.reply("❌ Could not DM that user.")
@@ -151,21 +228,26 @@ class SelfBot(discord.Client):
             
             # ── MentionRole ──
             elif cmd == 'mentionrole':
-                # Find role from args before first space
                 parts = args.split(maxsplit=1)
                 if len(parts) < 2:
                     await message.reply("Usage: `.mentionrole <role name> <message>`")
                     return
                 role_name = parts[0].strip()
-                role_msg = parts[1].strip()
+                text = parts[1].strip()
                 if not message.guild:
                     await message.reply("❌ This only works in a server.")
                     return
                 role = discord.utils.get(message.guild.roles, name=role_name)
                 if not role:
+                    try:
+                        rid = int(role_name)
+                        role = message.guild.get_role(rid)
+                    except:
+                        pass
+                if not role:
                     await message.reply(f"❌ Role `{role_name}` not found.")
                     return
-                await message.channel.send(f"{role.mention} {role_msg}")
+                await message.channel.send(f"{role.mention} {text}")
             
             # ── Nick ──
             elif cmd == 'nick':
@@ -179,14 +261,13 @@ class SelfBot(discord.Client):
                     await message.guild.me.edit(nick=args[:32])
                     await message.reply(f"✅ Nickname changed to `{args[:32]}`")
                 except:
-                    await message.reply("❌ Cannot change nickname (missing permissions).")
+                    await message.reply("❌ Cannot change nickname.")
             
             # ── React ──
             elif cmd == 'react':
                 if not args:
                     await message.reply("Usage: `.react 😊`")
                     return
-                # React to the last bot message in channel
                 async for msg in message.channel.history(limit=5):
                     if msg.author == self.user and msg.id != message.id:
                         try:
@@ -212,18 +293,7 @@ class SelfBot(discord.Client):
                 except:
                     await message.reply("❌ Invalid number.")
             
-            # ── Purge (delete own messages only) ──
-            elif cmd == 'purge':
-                count = 10
-                if args:
-                    try:
-                        count = min(int(args.split()[0]), 100)
-                    except:
-                        count = 10
-                deleted = await self.clear_messages(message.channel, count)
-                await message.reply(f'🗑️ Deleted {len(deleted)} messages', delete_after=5)
-            
-            # ── Channel Topic ──
+            # ── Topic ──
             elif cmd == 'topic':
                 if not args:
                     await message.reply("Usage: `.topic <new topic>`")
@@ -234,18 +304,19 @@ class SelfBot(discord.Client):
                 except:
                     await message.reply("❌ Cannot change topic.")
             
-            # ── Channel Rename ──
+            # ── Rename ──
             elif cmd == 'rename':
                 if not args:
                     await message.reply("Usage: `.rename <new name>`")
                     return
+                new_name = args[:100].replace(' ', '-').lower()
                 try:
-                    await message.channel.edit(name=args[:100].replace(' ', '-').lower())
-                    await message.reply("✅ Channel renamed.")
+                    await message.channel.edit(name=new_name)
+                    await message.reply(f"✅ Channel renamed to `{new_name}`")
                 except:
                     await message.reply("❌ Cannot rename.")
             
-            # ── Copy last message of a user ──
+            # ── Copy ──
             elif cmd == 'copy':
                 if not message.mentions:
                     await message.reply("❌ Mention someone! `.copy @user`")
@@ -257,20 +328,18 @@ class SelfBot(discord.Client):
                         return
                 await message.reply("❌ No recent message from that user.")
             
-            # ── Steal Emoji ──
+            # ── StealEmoji ──
             elif cmd == 'stealemoji':
-                # Expects custom emoji like :emoji: or <:name:id>
                 if not args:
                     await message.reply("Usage: `.stealemoji <emoji>`")
                     return
-                # Extract emoji ID from custom emoji
                 match = re.match(r'<a?:(\w+):(\d+)>', args.strip())
                 if not match:
                     await message.reply("❌ That's not a custom emoji. Use the emoji itself.")
                     return
                 name = match.group(1)
-                emoji_id = match.group(2)
-                url = f"https://cdn.discordapp.com/emojis/{emoji_id}.png"
+                eid = match.group(2)
+                url = f"https://cdn.discordapp.com/emojis/{eid}.png"
                 if not message.guild:
                     await message.reply("❌ This only works in a server.")
                     return
@@ -279,30 +348,31 @@ class SelfBot(discord.Client):
                         if resp.status != 200:
                             await message.reply("❌ Could not fetch emoji image.")
                             return
-                        image_data = await resp.read()
+                        img = await resp.read()
                 try:
-                    await message.guild.create_custom_emoji(name=name, image=image_data)
-                    await message.reply(f"✅ Emoji `:{name}:` added to this server.")
+                    await message.guild.create_custom_emoji(name=name, image=img)
+                    await message.reply(f"✅ Emoji `:{name}:` added.")
                 except discord.Forbidden:
                     await message.reply("❌ No permission to create emojis.")
                 except:
                     await message.reply("❌ Failed to add emoji.")
             
-            # ── Guilds list ──
+            # ── Guilds ──
             elif cmd == 'guilds':
-                guilds = [f"• {guild.name} ({guild.member_count})" for guild in self.guilds[:20]]
-                await message.reply(f"📡 **I'm in {len(self.guilds)} servers:**\n" + "\n".join(guilds))
+                guilds = [f"• {g.name} ({g.member_count})" for g in self.guilds[:20]]
+                embed = discord.Embed(title=f"📡 Servers ({len(self.guilds)})", description="\n".join(guilds), color=0x00ff00)
+                await message.reply(embed=embed)
             
-            # ── Channel info ──
+            # ── Channelinfo ──
             elif cmd == 'channelinfo':
                 ch = message.channel
                 embed = discord.Embed(title=f"# {ch.name}", color=0x00ff00)
-                embed.add_field(name="🆔 ID", value=ch.id, inline=True)
-                embed.add_field(name="📌 Type", value=str(ch.type), inline=True)
+                embed.add_field(name="ID", value=ch.id, inline=True)
+                embed.add_field(name="Type", value=str(ch.type), inline=True)
                 if hasattr(ch, 'topic') and ch.topic:
-                    embed.add_field(name="📋 Topic", value=ch.topic[:100], inline=False)
-                embed.add_field(name="👥 Category", value=ch.category.name if ch.category else "None", inline=True)
-                embed.add_field(name="⏱️ Slowmode", value=f"{ch.slowmode_delay}s" if ch.slowmode_delay else "Off", inline=True)
+                    embed.add_field(name="Topic", value=ch.topic[:100], inline=False)
+                embed.add_field(name="Category", value=ch.category.name if ch.category else "None", inline=True)
+                embed.add_field(name="Slowmode", value=f"{ch.slowmode_delay}s" if ch.slowmode_delay else "Off", inline=True)
                 await message.reply(embed=embed)
             
             # ── Role Add / Remove ──
@@ -318,10 +388,9 @@ class SelfBot(discord.Client):
                     return
                 role = discord.utils.get(message.guild.roles, name=role_name)
                 if not role:
-                    # Try by ID
                     try:
-                        role_id = int(role_name)
-                        role = message.guild.get_role(role_id)
+                        rid = int(role_name)
+                        role = message.guild.get_role(rid)
                     except:
                         pass
                 if not role:
@@ -346,8 +415,8 @@ class SelfBot(discord.Client):
                 role = discord.utils.get(message.guild.roles, name=role_name)
                 if not role:
                     try:
-                        role_id = int(role_name)
-                        role = message.guild.get_role(role_id)
+                        rid = int(role_name)
+                        role = message.guild.get_role(rid)
                     except:
                         pass
                 if not role:
@@ -359,19 +428,313 @@ class SelfBot(discord.Client):
                 except:
                     await message.reply("❌ Cannot remove role.")
             
-            # ── Fallback ──
+            # ── Existing commands (ping, 8ball, etc.) ──
+            elif cmd in ('ping', '8ball', 'joke', 'coinflip', 'roll', 'choose', 'rps', 'cat', 'dog', 'meme', 'quote', 'fact', 'hug', 'slap', 'say', 'embed', 'avatar', 'serverinfo', 'userinfo', 'roleinfo', 'viewrole', 'emoji', 'weather', 'define', 'urban', 'translate', 'shorten', 'qr', 'timer', 'remind', 'poll', 'clear', 'purge', 'invite', 'feedback', 'report', 'bug'):
+                # Map to the existing function
+                await self.handle_old_commands(message, cmd, args)
+            
             else:
-                # Check if it's one of the previously defined commands (help, ping, 8ball, etc.)
-                # We'll just show unknown command
                 await message.reply(f"❌ Unknown command `{cmd}`. Use `.help` for the list.")
         
         except Exception as e:
             print(f"Error: {e}")
             await message.channel.send(f'❌ Error: {str(e)}', delete_after=10)
     
-    async def show_help(self, message, cmd_name='general'):
-        # (help text included in previous code)
-        pass
+    async def handle_old_commands(self, message, cmd, args):
+        """Reuse your previous command logic here."""
+        if cmd == 'ping':
+            await message.reply('🚀 **Pong!**')
+        elif cmd == '8ball':
+            if not args:
+                await message.reply("❌ Ask a question! `.8ball Will I win?`")
+                return
+            responses = [
+                "🎱 It is certain.", "🎱 It is decidedly so.", "🎱 Without a doubt.",
+                "🎱 Yes – definitely.", "🎱 You may rely on it.", "🎱 As I see it, yes.",
+                "🎱 Most likely.", "🎱 Outlook good.", "🎱 Yes.",
+                "🎱 Signs point to yes.", "🎱 Reply hazy, try again.",
+                "🎱 Ask again later.", "🎱 Better not tell you now.",
+                "🎱 Cannot predict now.", "🎱 Concentrate and ask again.",
+                "🎱 Don't count on it.", "🎱 My reply is no.",
+                "🎱 My sources say no.", "🎱 Outlook not so good.",
+                "🎱 Very doubtful."
+            ]
+            await message.reply(random.choice(responses))
+        elif cmd == 'joke':
+            async with aiohttp.ClientSession() as session:
+                async with session.get('https://official-joke-api.appspot.com/random_joke') as resp:
+                    if resp.status == 200:
+                        data = await resp.json()
+                        await message.reply(f"**{data['setup']}**\n\n{data['punchline']}")
+                    else:
+                        await message.reply("Couldn't fetch a joke.")
+        elif cmd == 'coinflip':
+            await message.reply(f"🪙 **{random.choice(['Heads', 'Tails'])}**")
+        elif cmd == 'roll':
+            try:
+                max_num = int(args) if args else 100
+                if max_num < 2: max_num = 100
+                await message.reply(f"🎲 **{random.randint(1, max_num)}** (1-{max_num})")
+            except:
+                await message.reply("❌ Invalid number.")
+        elif cmd == 'choose':
+            options = [o.strip() for o in args.split('|')]
+            if len(options) < 2:
+                await message.reply("❌ Give options separated by `|`.")
+                return
+            await message.reply(f"🤔 I choose **{random.choice(options)}**")
+        elif cmd == 'rps':
+            choices = ['rock', 'paper', 'scissors']
+            user_choice = args.lower().strip()
+            if user_choice not in choices:
+                await message.reply("❌ Choose `rock`, `paper`, or `scissors`.")
+                return
+            bot_choice = random.choice(choices)
+            if user_choice == bot_choice:
+                result = "It's a tie!"
+            elif (user_choice == 'rock' and bot_choice == 'scissors') or \
+                 (user_choice == 'scissors' and bot_choice == 'paper') or \
+                 (user_choice == 'paper' and bot_choice == 'rock'):
+                result = "You win! 🎉"
+            else:
+                result = "I win! 😎"
+            await message.reply(f"**You:** {user_choice}  vs  **Me:** {bot_choice}\n{result}")
+        elif cmd == 'cat':
+            async with aiohttp.ClientSession() as session:
+                async with session.get('https://api.thecatapi.com/v1/images/search') as resp:
+                    if resp.status == 200:
+                        data = await resp.json()
+                        await message.reply(data[0]['url'])
+                    else:
+                        await message.reply("Couldn't fetch a cat pic.")
+        elif cmd == 'dog':
+            async with aiohttp.ClientSession() as session:
+                async with session.get('https://dog.ceo/api/breeds/image/random') as resp:
+                    if resp.status == 200:
+                        data = await resp.json()
+                        await message.reply(data['message'])
+                    else:
+                        await message.reply("Couldn't fetch a dog pic.")
+        elif cmd == 'meme':
+            async with aiohttp.ClientSession() as session:
+                async with session.get('https://meme-api.com/gimme') as resp:
+                    if resp.status == 200:
+                        data = await resp.json()
+                        await message.reply(f"**{data['title']}**\n{data['url']}")
+                    else:
+                        await message.reply("Couldn't fetch a meme.")
+        elif cmd == 'quote':
+            async with aiohttp.ClientSession() as session:
+                async with session.get('https://api.quotable.io/random') as resp:
+                    if resp.status == 200:
+                        data = await resp.json()
+                        await message.reply(f"*\"{data['content']}\"*\n— {data['author']}")
+                    else:
+                        await message.reply("Couldn't fetch a quote.")
+        elif cmd == 'fact':
+            async with aiohttp.ClientSession() as session:
+                async with session.get('https://uselessfacts.jsph.pl/random.json?language=en') as resp:
+                    if resp.status == 200:
+                        data = await resp.json()
+                        await message.reply(f"💡 {data['text']}")
+                    else:
+                        await message.reply("Couldn't fetch a fact.")
+        elif cmd == 'hug':
+            if not message.mentions:
+                await message.reply("❌ Mention someone to hug!")
+                return
+            await message.reply(f"🤗 **{message.author.mention} hugs {message.mentions[0].mention}!**")
+        elif cmd == 'slap':
+            if not message.mentions:
+                await message.reply("❌ Mention someone to slap!")
+                return
+            await message.reply(f"🤚 **{message.author.mention} slaps {message.mentions[0].mention}!**")
+        elif cmd == 'say':
+            if not args:
+                await message.reply("❌ Give me something to say!")
+                return
+            await message.channel.send(args)
+        elif cmd == 'embed':
+            if '|' not in args:
+                await message.reply("❌ Usage: `.embed Title | Description`")
+                return
+            parts = args.split('|', 1)
+            embed = discord.Embed(title=parts[0].strip(), description=parts[1].strip(), color=0x00ff00)
+            await message.channel.send(embed=embed)
+        elif cmd == 'avatar':
+            user = message.mentions[0] if message.mentions else message.author
+            embed = discord.Embed(title=f"🖼️ {user.display_name}'s Avatar", color=0x00ff00)
+            embed.set_image(url=user.display_avatar.url)
+            await message.reply(embed=embed)
+        elif cmd == 'serverinfo':
+            if not message.guild:
+                await message.reply("❌ Only works in a server.")
+                return
+            g = message.guild
+            embed = discord.Embed(title=g.name, color=0x00ff00)
+            embed.add_field(name="ID", value=g.id, inline=True)
+            embed.add_field(name="Owner", value=g.owner.mention, inline=True)
+            embed.add_field(name="Members", value=g.member_count, inline=True)
+            embed.add_field(name="Channels", value=len(g.channels), inline=True)
+            embed.add_field(name="Roles", value=len(g.roles), inline=True)
+            embed.add_field(name="Created", value=g.created_at.strftime("%b %d, %Y"), inline=True)
+            if g.icon:
+                embed.set_thumbnail(url=g.icon.url)
+            await message.reply(embed=embed)
+        elif cmd == 'userinfo':
+            user = message.mentions[0] if message.mentions else message.author
+            embed = discord.Embed(title=f"👤 {user.display_name}", color=0x00ff00)
+            embed.add_field(name="ID", value=user.id, inline=True)
+            embed.add_field(name="Username", value=user.name, inline=True)
+            embed.add_field(name="Joined Discord", value=user.created_at.strftime("%b %d, %Y"), inline=True)
+            if hasattr(user, 'joined_at') and user.joined_at:
+                embed.add_field(name="Joined Server", value=user.joined_at.strftime("%b %d, %Y"), inline=True)
+            embed.set_thumbnail(url=user.display_avatar.url)
+            await message.reply(embed=embed)
+        elif cmd == 'roleinfo':
+            if not message.guild:
+                await message.reply("❌ Only works in a server.")
+                return
+            if not args:
+                await message.reply("❌ Specify a role name or ID.")
+                return
+            role = None
+            try:
+                rid = int(args)
+                role = message.guild.get_role(rid)
+            except:
+                role = discord.utils.get(message.guild.roles, name=args)
+            if not role:
+                await message.reply("❌ Role not found.")
+                return
+            embed = discord.Embed(title=f"🎭 Role: {role.name}", color=role.color)
+            embed.add_field(name="ID", value=role.id, inline=True)
+            embed.add_field(name="Color", value=role.color.to_hex(), inline=True)
+            embed.add_field(name="Members", value=len(role.members), inline=True)
+            embed.add_field(name="Position", value=role.position, inline=True)
+            embed.add_field(name="Hoisted", value=role.hoist, inline=True)
+            embed.add_field(name="Mentionable", value=role.mentionable, inline=True)
+            await message.reply(embed=embed)
+        elif cmd == 'viewrole':
+            if not message.guild:
+                await message.reply("❌ Only works in a server.")
+                return
+            roles = message.guild.roles[1:]
+            if len(roles) > 30:
+                await message.reply(f"📋 This server has **{len(roles)}** roles. Showing first 30:")
+                roles = roles[:30]
+            else:
+                await message.reply(f"📋 **{len(roles)} roles:**")
+            for role in roles:
+                color_hex = role.color.to_hex() if role.color.value != 0 else "#000000"
+                await message.channel.send(f"`{role.name}` | `{role.id}` | `{color_hex}`")
+        elif cmd == 'emoji':
+            if not message.guild:
+                await message.reply("❌ Only works in a server.")
+                return
+            emojis = message.guild.emojis
+            if not emojis:
+                await message.reply("No custom emojis.")
+                return
+            lines = [f"{emoji} `:{emoji.name}:`" for emoji in emojis[:30]]
+            await message.reply(f"**{len(emojis)} custom emojis:**\n" + "\n".join(lines))
+        elif cmd == 'weather':
+            await message.reply(f"🌤️ Weather for **{args or 'Unknown'}** – placeholder.")
+        elif cmd == 'define':
+            if not args:
+                await message.reply("❌ Give a word to define!")
+                return
+            async with aiohttp.ClientSession() as session:
+                async with session.get(f'https://api.dictionaryapi.dev/api/v2/entries/en/{args}') as resp:
+                    if resp.status == 200:
+                        data = await resp.json()
+                        word = data[0]['word']
+                        pos = data[0]['meanings'][0]['partOfSpeech']
+                        defn = data[0]['meanings'][0]['definitions'][0]['definition']
+                        await message.reply(f"📖 **{word}** ({pos})\n{defn}")
+                    else:
+                        await message.reply("Word not found.")
+        elif cmd == 'urban':
+            if not args:
+                await message.reply("❌ Give a term!")
+                return
+            async with aiohttp.ClientSession() as session:
+                async with session.get(f'https://api.urbandictionary.com/v0/define?term={args}') as resp:
+                    if resp.status == 200:
+                        data = await resp.json()
+                        if data['list']:
+                            entry = data['list'][0]
+                            await message.reply(f"**{entry['word']}**\n{entry['definition'][:500]}")
+                        else:
+                            await message.reply("No results.")
+                    else:
+                        await message.reply("Couldn't fetch.")
+        elif cmd == 'translate':
+            await message.reply("🌐 Translation placeholder (API key needed).")
+        elif cmd == 'shorten':
+            await message.reply("🔗 URL shortener placeholder.")
+        elif cmd == 'qr':
+            await message.reply("📱 QR code generator placeholder.")
+        elif cmd == 'timer':
+            try:
+                sec = int(args)
+                await message.reply(f"⏰ Timer set for {sec} seconds!")
+                await asyncio.sleep(sec)
+                await message.channel.send(f"⏰ **Timer done!** {message.author.mention}")
+            except:
+                await message.reply("❌ Usage: `.timer 30`")
+        elif cmd == 'remind':
+            if '|' not in args:
+                await message.reply("❌ Usage: `.remind 5 | Drink water`")
+                return
+            parts = args.split('|', 1)
+            try:
+                mins = int(parts[0].strip())
+                text = parts[1].strip()
+                await message.reply(f"⏰ Reminder set for {mins} minute(s)!")
+                await asyncio.sleep(mins * 60)
+                await message.channel.send(f"⏰ **Reminder:** {text} {message.author.mention}")
+            except:
+                await message.reply("❌ Invalid minutes.")
+        elif cmd == 'poll':
+            if '|' not in args:
+                await message.reply("❌ Usage: `.poll Q | A | B`")
+                return
+            parts = [p.strip() for p in args.split('|')]
+            if len(parts) < 3:
+                await message.reply("❌ Need question and at least 2 options.")
+                return
+            question = parts[0]
+            opts = parts[1:]
+            if len(opts) > 10:
+                await message.reply("❌ Max 10 options.")
+                return
+            letters = ['🇦','🇧','🇨','🇩','🇪','🇫','🇬','🇭','🇮','🇯']
+            lines = [f"**{question}**"]
+            for i, opt in enumerate(opts):
+                lines.append(f"{letters[i]} {opt}")
+            poll_msg = await message.channel.send("\n".join(lines))
+            for i in range(len(opts)):
+                await poll_msg.add_reaction(letters[i])
+        elif cmd in ('clear', 'purge'):
+            count = 10
+            if args:
+                try:
+                    count = min(int(args.split()[0]), 100)
+                except:
+                    count = 10
+            deleted = await self.clear_messages(message.channel, count)
+            await message.reply(f'🗑️ Deleted {len(deleted)} messages', delete_after=5)
+        elif cmd == 'invite':
+            await message.reply("🔗 Invite link: (contact for invite)")
+        elif cmd == 'feedback':
+            await message.reply(f"✅ Feedback received: *{args or 'empty'}*")
+        elif cmd == 'report':
+            await message.reply(f"✅ Report submitted: *{args or 'empty'}*")
+        elif cmd == 'bug':
+            await message.reply(f"🐛 Bug reported: *{args or 'empty'}*")
+        else:
+            await message.reply(f"❌ Unknown command `{cmd}`.")  # Should not reach
     
     async def clear_messages(self, channel, limit=10):
         deleted = []
