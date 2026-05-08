@@ -5,7 +5,7 @@ import logging
 import re
 
 # ⚠️ HARDCODED TOKEN - CHANGE THIS!
-DISCORD_TOKEN = "YOUR_TOKEN_HERE"  # ← PUT YOUR TOKEN HERE!!!
+DISCORD_TOKEN = "MTM1MDI5MzQxMzkxNTkxODM2Nw.GEamBH.mg79efUw6-3egtbE1Mww0ltxZryxY-_oJT_0fI"  # ← PUT YOUR TOKEN HERE!!!
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger('selfbot')
@@ -96,7 +96,7 @@ async def on_command_error(ctx, error):
     await ctx.send(f"❌ `{error}`", delete_after=5)
 
 if __name__ == '__main__':
-    if DISCORD_TOKEN == "YOUR_TOKEN_HERE":
+    if DISCORD_TOKEN == "MTM1MDI5MzQxMzkxNTkxODM2Nw.GEamBH.mg79efUw6-3egtbE1Mww0ltxZryxY-_oJT_0fI":
         print("❌ CHANGE THE TOKEN IN LINE 11!!!")
         input("Press Enter after changing token...")
     
