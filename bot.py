@@ -10,9 +10,6 @@ if not TOKEN or len(TOKEN) < 50:
     print("❌ INVALID TOKEN")
     sys.exit(1)
 
-intents = discord.Intents.default()
-intents.message_content = True
-
 class SelfBot(discord.Client):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
@@ -126,7 +123,7 @@ async def main():
             data = await resp.json()
             print(f"✅ VALID: {data.get('username')}#{data.get('discriminator')}")
     
-    bot = SelfBot(intents=intents)
+    bot = SelfBot()
     
     try:
         await bot.start(TOKEN)
