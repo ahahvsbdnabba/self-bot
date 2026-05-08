@@ -96,13 +96,9 @@ async def on_command_error(ctx, error):
     await ctx.send(f"❌ `{error}`", delete_after=5)
 
 if __name__ == '__main__':
-    if DISCORD_TOKEN == "MTM1MDI5MzQxMzkxNTkxODM2Nw.GEamBH.mg79efUw6-3egtbE1Mww0ltxZryxY-_oJT_0fI":
-        print("❌ CHANGE THE TOKEN IN LINE 11!!!")
-        input("Press Enter after changing token...")
-    
     try:
         client.run(DISCORD_TOKEN, bot=False)
-    except discord.LoginFailure:
+    except discord.Login:
         print('❌ INVALID TOKEN!')
     except Exception as e:
         print(f'❌ {e}')
