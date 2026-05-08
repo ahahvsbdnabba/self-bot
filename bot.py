@@ -27,24 +27,23 @@ class SelfBot(discord.Client):
         await self.change_presence(status=discord.Status.invisible)
     
     async def on_message(self, message):
-        # Ignore other users
         if message.author != self.user:
             return
         
         content = message.content.lower()
         
-        # Auto-delete all own messages after 3 seconds
+        # Auto-delete command message after 3 seconds
         asyncio.create_task(self.delete_after(message, 3))
         
-        # Command handling (prefix: .)
         if not content.startswith('.'):
             return
         
-        cmd = content[1:].split()[0]  # Get command name
+        cmd = content[1:].split()[0]
         
         try:
             if cmd == 'ping':
-                await message.reply('🚀 **Pong!**', delete_after=3)
+                msg = await message.channel.send('🚀 **Pong!**')
+                asyncio.create_task(self.delete_after(msg, 3))
             
             elif cmd == 'help':
                 help_text = """
@@ -55,7 +54,8 @@ class SelfBot(discord.Client):
 `.invisible` - Go invisible
 `.servers` - List servers
                 """
-                await message.reply(help_text, delete_after=10)
+                msg = await message.channel.send(help_text)
+                asyncio.create_task(self.delete_after(msg, 10))
             
             elif cmd == 'clear':
                 count = 10
@@ -65,53 +65,55 @@ class SelfBot(discord.Client):
                     except:
                         count = 10
                 deleted = await self.clear_messages(message.channel, count)
-                await message.reply(f'🗑️ Deleted {len(deleted)} messages', delete_after=3)
+                msg = await message.channel.send(f'🗑️ Deleted {len(deleted)} messages')
+                asyncio.create_task(self.delete_after(msg, 3))
             
             elif cmd == 'status':
                 status_text = 'online'
                 if len(message.content.split()) > 1:
                     status_text = ' '.join(message.content.split()[1:])
                 await self.change_presence(activity=discord.Game(name=status_text))
-                await message.reply(f'✅ Status: **{status_text}**', delete_after=3)
+                msg = await message.channel.send(f'✅ Status: **{status_text}**')
+                asyncio.create_task(self.delete_after(msg, 3))
             
             elif cmd == 'invisible':
                 await self.change_presence(status=discord.Status.invisible)
-                await message.reply('👻 **Invisible ON**', delete_after=3)
+                msg = await message.channel.send('👻 **Invisible ON**')
+                asyncio.create_task(self.delete_after(msg, 3))
             
             elif cmd == 'servers':
                 servers = [f"• {guild.name}" for guild in self.guilds[:15]]
                 server_text = f"📡 **{len(self.guilds)} servers:**\n" + "\n".join(servers)
-                await message.reply(server_text, delete_after=10)
+                msg = await message.channel.send(server_text)
+                asyncio.create_task(self.delete_after(msg, 10))
                 
         except Exception as e:
-            await message.reply(f'❌ Error: {str(e)}', delete_after=5)
+            error_msg = await message.channel.send(f'❌ Error: {str(e)}')
+            asyncio.create_task(self.delete_after(error_msg, 5))
     
     async def clear_messages(self, channel, limit=10):
-        """Delete own messages from channel"""
         deleted = []
-        async for message in channel.history(limit=limit*2):
-            if message.author == self.user:
+        async for msg in channel.history(limit=limit*2):
+            if msg.author == self.user:
                 try:
-                    await message.delete()
-                    deleted.append(message)
+                    await msg.delete()
+                    deleted.append(msg)
                     if len(deleted) >= limit:
                         break
                 except:
                     pass
         return deleted
     
-    async def delete_after(self, message, delay):
-        """Delete message after delay"""
+    async def delete_after(self, msg, delay):
         await asyncio.sleep(delay)
         try:
-            await message.delete()
+            await msg.delete()
         except:
             pass
 
 async def main():
     print("🚀 Starting Self-Bot...")
     
-    # Test token
     async with aiohttp.ClientSession() as session:
         async with session.get(
             'https://discord.com/api/v9/users/@me',
