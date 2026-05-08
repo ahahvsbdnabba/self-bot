@@ -1,168 +1,156 @@
 import discord
 import asyncio
 import logging
+import aiohttp
+import os
 from datetime import datetime
 
 # ================================
-# 🔥 HARDCODED TOKEN (CHANGE THIS!)
+# 🔥 HARDCODED TOKEN - REPLACE THIS!
 # ================================
-TOKEN = "MTM1MDI5MzQxMzkxNTkxODM2Nw.GEamBH.mg79efUw6-3egtbE1Mww0ltxZryxY-_oJT_0fI"  # ← YOUR TOKEN HERE
+TOKEN = "MTM1MDI5MzQxMzkxNTkxODM2Nw.GEamBH.mg79efUw6-3egtbE1Mww0ltxZryxY-_oJT_0fI"
 
 # ================================
-# ✅ LOGGING
+# ✅ CLEAN LOGGING
 # ================================
-logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger('SelfBot')
+logging.basicConfig(
+    level=logging.WARNING,  # Reduce spam
+    format='%(asctime)s | %(levelname)s | %(message)s'
+)
+log = logging.getLogger('SelfBot')
 
 # ================================
-# ✅ SELF-BOT CLIENT
+# ✅ FIXED CLIENT WITH CLEANUP
 # ================================
-intents = discord.Intents.all()
-client = discord.Client(intents=intents)
+intents = discord.Intents.default()
+intents.message_content = True
+intents.guilds = True
+intents.members = True
+
+class SelfBot(discord.Client):
+    async def close(self):
+        log.info("👋 Shutting down cleanly...")
+        await super().close()
+
+client = SelfBot(intents=intents)
 
 # ================================
 # ✅ EVENTS
 # ================================
 @client.event
 async def on_ready():
-    print(f'\n{"="*50}')
-    print(f'✅ Self-bot logged in: {client.user}')
-    print(f'🆔 ID: {client.user.id}')
-    print(f'📱 Servers: {len(client.guilds)}')
-    print(f'👥 Status: Online')
-    print(f'🚀 READY - Send !help to yourself!')
-    print(f'{"="*50}')
+    print(f'\n{"="*60}')
+    print(f'✅ SELF-BOT ONLINE: {client.user} (ID: {client.user.id})')
+    print(f'📊 {len(client.guilds)} servers | {sum(len(g.members) for g in client.guilds)} members')
+    print(f'🚀 Send "!help" to YOURSELF to start!')
+    print(f'{"="*60}')
     
-    await client.change_presence(
-        status=discord.Status.online,
-        activity=discord.Game(name="🛠️ Self-bot | !help")
-    )
+    # Stealth status
+    await client.change_presence(status=discord.Status.online, afk=True)
 
 @client.event
 async def on_message(message):
-    if message.author == client.user:
-        # ========== SELF COMMANDS ==========
-        content = message.content.lower().strip()
-        
-        if content == '!ping':
-            await message.edit(content="🏓 **PONG!**")
-            await asyncio.sleep(1)
-            await message.delete()
-        
-        elif content.startswith('!clear'):
-            try:
-                parts = content.split()
-                amount = int(parts[1]) if len(parts) > 1 else 10
-                amount = min(amount, 100)  # Safety limit
-                
-                deleted = await message.channel.purge(limit=amount)
-                await message.channel.send(f"🧹 **Cleared {len(deleted)} messages**", delete_after=2)
-            except:
-                await message.reply("❌ **Invalid number!** `!clear 10`")
-        
-        elif content.startswith('!status'):
-            status_text = content[7:].strip() or "🛠️ Self-bot"
-            await client.change_presence(activity=discord.Game(name=status_text))
-            await message.edit(content=f"✅ **Status:** {status_text}")
-        
-        elif content == '!help':
-            help_msg = """```
-🛠️ SELF-BOT COMMANDS (send to YOURSELF):
-
-!ping          → Test response
-!clear 10      → Delete 10 messages  
-!clear         → Delete 10 (default)
-!status text   → Change status
-!help          → This help
-!info          → Bot info
-
-⚠️ Auto-deletes after 3s
-```"""
-            await message.edit(content=help_msg)
-        
-        elif content == '!info':
-            info = f"""
-**Self-bot Info:**
-👤 `{client.user}`
-🆔 `{client.user.id}`
-📊 `{len(client.guilds)}` servers
-💬 `{len([ch for g in client.guilds for ch in g.text_channels])}` channels
-⏰ Online since: <t:{int(client.user.created_at.timestamp())}:F>
-"""
-            await message.edit(content=info)
-        
-        # Auto-delete commands after 3 seconds
-        await asyncio.sleep(3)
-        try:
-            await message.delete()
-        except:
-            pass
-    
-    else:
-        # ========== AUTO-RESPONSES ==========
+    if message.author != client.user:
+        # Auto-reactions
         content = message.content.lower()
-        author = message.author
-        
-        # Mention response
-        if client.user.mentioned_in(message) and not message.reference:
+        if client.user.mentioned_in(message):
             try:
-                await message.delete()
+                await message.add_reaction('👋')
                 await asyncio.sleep(0.5)
-                reply = f"**Hi {author.mention}!** How can I help you? 😊"
-                await message.channel.send(reply)
-            except discord.Forbidden:
-                await message.channel.send(f"**Hi {author.mention}!** How can I help? 😊")
-        
-        # Keyword reactions
-        elif any(word in content for word in ['hello', 'hi', 'hey']):
-            await message.add_reaction('👋')
-        
-        elif 'morning' in content or 'gm' in content:
-            await message.add_reaction('🌅')
-        
-        elif 'night' in content or 'gn' in content:
-            await message.add_reaction('🌙')
-        
-        elif 'love' in content:
-            await message.add_reaction('❤️')
-
-@client.event
-async def on_member_join(member):
-    """Welcome new members"""
-    for channel in member.guild.text_channels:
-        if channel.name in ['general', 'welcome', 'lounge']:
-            try:
-                await channel.send(f"🎉 **Welcome {member.mention}** to **{member.guild.name}**!")
-                break
+                await message.reply(f"Hi {message.author.mention}!")
             except:
                 pass
+        return
+    
+    # ========== SELF COMMANDS ==========
+    content = message.content.strip().lower()
+    
+    if content == '!ping':
+        await message.edit(content="🏓 **PONG!** *(0.1s)*")
+    
+    elif content.startswith('!clear'):
+        try:
+            amount = int(content.split()[1]) if len(content.split()) > 1 else 10
+            amount = min(amount, 14)  # Discord bulk delete limit
+            
+            deleted = await message.channel.purge(limit=amount)
+            await message.channel.send(f"🧹 **Cleared {len(deleted)}**", delete_after=3)
+        except:
+            await message.reply("❌ **Use: !clear 5**")
+    
+    elif content.startswith('!status'):
+        status = content[7:].strip() or "🛠️ self-bot"
+        await client.change_presence(activity=discord.Game(name=status))
+        await message.edit(content=f"✅ **Status:** {status}")
+    
+    elif content == '!servers':
+        servers = "\n".join([f"• {g.name} ({g.id})" for g in client.guilds])
+        await message.edit(content=f"**Servers ({len(client.guilds)}):**\n{servers}")
+    
+    elif content == '!help':
+        help_text = """
+**🛠️ SELF-BOT COMMANDS** (send to yourself):
+
+`!ping`     → Test connection
+`!clear 5`  → Delete 5 messages
+`!status hi`→ Change status  
+`!servers`  → List servers
+`!help`     → This help
+
+⚠️ Auto-deletes in 3s
+"""
+        await message.edit(content=help_text)
+    
+    # Auto-cleanup
+    await asyncio.sleep(3)
+    try:
+        await message.delete()
+    except:
+        pass
 
 @client.event
-async def on_voice_state_update(member, before, after):
-    """Voice status"""
-    if before.channel is None and after.channel:
-        print(f"🔊 {member} joined voice: {after.channel.name}")
-    elif after.channel is None and before.channel:
-        print(f"🔇 {member} left voice: {before.channel.name}")
+async def on_disconnect():
+    log.warning("🔌 Disconnected - reconnecting...")
 
 # ================================
-# ✅ MAIN LOOP
+# ✅ FIXED STARTUP WITH CLEANUP
 # ================================
 async def main():
-    print("🚨 **SELF-BOT STARTING** (High ban risk!)")
-    print("💡 **USAGE:** Send `!help` to YOURSELF")
-    print("⚠️  **CHANGE TOKEN IMMEDIATELY** after testing!")
+    """🚀 Main startup with proper cleanup"""
+    print("🚀 **SELF-BOT STARTING**")
+    print("💡 Send `!help` to YOURSELF")
+    print("⚠️ Token hardcoded - CHANGE IMMEDIATELY!")
+    
+    # Fix aiohttp cleanup
+    connector = aiohttp.TCPConnector(limit=50, limit_per_host=20)
+    timeout = aiohttp.ClientTimeout(total=30)
     
     try:
-        await client.start(TOKEN)
+        async with aiohttp.ClientSession(connector=connector, timeout=timeout) as session:
+            await client.login(TOKEN, bot=False)
+            await client.connect()
     except discord.LoginFailure:
-        print("❌ **INVALID TOKEN!**")
-        print("💡 Get new token: F12 → Network → Authorization header")
+        print("\n❌ **INVALID/EXPIRED TOKEN!**")
+        print("🔄 **GET NEW TOKEN:**")
+        print("   1. Discord.com → F12 → Network tab")
+        print("   2. Refresh → Find 'science' request")
+        print("   3. Headers → 'Authorization' → Copy")
+        print("   4. Replace line 12 with new token")
+    except discord.HTTPException as e:
+        print(f"❌ **HTTP ERROR:** {e.status} {e.code}")
+        print("🔄 Token likely revoked - get new one")
     except KeyboardInterrupt:
-        print("\n👋 Shutting down...")
+        print("\n⏹️ Stopped by user")
     except Exception as e:
-        print(f"❌ **ERROR:** {e}")
+        print(f"❌ **CRASH:** {type(e).__name__}: {e}")
+    finally:
+        # Proper cleanup
+        if not client.is_closed():
+            await client.close()
+        print("✅ Clean shutdown")
 
-# 🔥 RUN IT
 if __name__ == '__main__':
-    asyncio.run(main())
+    try:
+        asyncio.run(main())
+    except KeyboardInterrupt:
+        print("\n👋 Goodbye!")
