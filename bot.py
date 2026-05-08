@@ -17,13 +17,12 @@ print(f"🔥 Self-bot starting... Token length: {len(TOKEN)}")
 
 class UltimateSelfBot(discord.Client):
     def __init__(self):
-        # FIXED aiohttp connector - NO MORE ERRORS
+        # ✅ FIXED: Removed conflicting keepalive_timeout
         connector = aiohttp.TCPConnector(
             limit=5,
             limit_per_host=5,
             ttl_dns_cache=300,
-            keepalive_timeout=30,
-            force_close=True,
+            force_close=True,  # Perfect for self-bots
             enable_cleanup_closed=True,
             use_dns_cache=True,
             ssl=ssl.create_default_context()
