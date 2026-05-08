@@ -1,117 +1,110 @@
 import discord
 import asyncio
 import os
-import sys
 import aiohttp
-
-# Fix aiohttp globally
-aiohttp.client_exceptions.ClientConnectorError = Exception
+import gc
 
 TOKEN = os.getenv('DISCORD_TOKEN')
-print(f"🔥 Token: {len(TOKEN)} chars ✓")
+print(f"🔥 Token loaded: {len(TOKEN)} chars")
 
-class StealthSelfBot(discord.Client):
+class UltimateSelfBot(discord.Client):
     def __init__(self):
-        # Fix connector issues
+        # FIXED: Clean connector
         connector = aiohttp.TCPConnector(
-            limit=0, 
-            limit_per_host=0,
-            ttl_dns_cache=300,
-            use_dns_cache=True
+            limit=1,
+            limit_per_host=1,
+            force_close=True,
+            enable_cleanup_closed=True
         )
         super().__init__(intents=discord.Intents.all(), connector=connector)
     
-    async def on_connect(self):
-        print("🔗 **Connected to Discord**")
+    async def test_token(self):
+        """Quick token test"""
+        async with aiohttp.ClientSession(connector=aiohttp.TCPConnector(limit=1)) as session:
+            async with session.get(
+                "https://discord.com/api/v9/users/@me", 
+                headers={"Authorization": TOKEN}
+            ) as r:
+                if r.status == 200:
+                    data = await r.json()
+                    print(f"✅ **TOKEN VALID**: {data['username']}#{data['discriminator']}")
+                    return True
+        return False
     
     async def on_ready(self):
         print(f"""
 ╔══════════════════════════════════════════════╗
-║                ✅ SELF-BOT LIVE               ║
-║                                              ║
-║ 👤 {self.user} ({self.user.id})                ║
-║ 📡 {len(self.guilds)} servers                 ║
-║                                              ║
-║ 🎯 DM yourself: !ping !help !clear           ║
+║                ✅ LIVE & WORKING             ║
+║                                             ║
+║ 👤 {self.user}                            ║
+║ 🆔 {self.user.id}                         ║
+║ 📡 {len(self.guilds)} servers             ║
+║                                             ║
+║ 🎯 **Send !help to yourself**               ║
 ╚══════════════════════════════════════════════╝
         """)
-        # Invisible immediately
         await self.change_presence(status=discord.Status.invisible)
     
     async def on_message(self, message):
-        # Only respond to YOUR messages
         if message.author != self.user:
+            if self.user.mentioned_in(message):
+                await message.add_reaction('✅')
             return
         
-        cmd = message.content.lower().strip()
+        cmd = message.content.lower()
         
-        if cmd == '!ping':
-            await message.edit(content='🚀 **SELF-BOT 100% WORKING!**')
+        if '!ping' in cmd:
+            await message.edit(content='🏓 **PONG! WORKING!**')
         
-        elif cmd.startswith('!clear '):
+        elif '!help' in cmd:
+            await message.edit(content='''**COMMANDS:**
+!ping
+!help  
+!clear 5
+!status hi
+!invisible''')
+        
+        elif '!clear' in cmd:
             try:
-                count = min(int(cmd.split()[1]), 100)
-                deleted = await message.channel.purge(limit=count + 1)
-                await message.channel.send(f'🗑️ **{len(deleted)} deleted**', delete_after=3)
+                count = 10
+                if cmd.split()[1:]:
+                    count = int(cmd.split()[1])
+                await message.channel.purge(limit=count)
             except:
-                await message.reply('❌ **No perms**')
+                await message.reply('❌ No perms')
         
-        elif cmd == '!help':
-            await message.edit(content='''🔥 **SELF-BOT COMMANDS**
-`!ping` Test
-`!clear 20` Delete
-`!invisible` Hide
-`!status coding` Status
-`!servers` List servers''')
+        elif '!status' in cmd:
+            await self.change_presence(activity=discord.Game(name='self-bot'))
+            await message.edit(content='✅ Status changed')
         
-        elif cmd == '!invisible':
+        elif '!invisible' in cmd:
             await self.change_presence(status=discord.Status.invisible)
-            await message.edit(content='👻 **Invisible ON**')
+            await message.edit(content='👻 Invisible')
         
-        elif cmd.startswith('!status '):
-            status_text = ' '.join(cmd.split()[1:])
-            await self.change_presence(activity=discord.Game(name=status_text))
-            await message.edit(content=f'✅ **Status: {status_text}**')
-        
-        elif cmd == '!servers':
-            servers = [guild.name for guild in self.guilds]
-            await message.edit(content=f'📡 **Servers ({len(servers)}):**\n' + '\n'.join(servers[:10]))
-        
-        # Auto cleanup
-        await asyncio.sleep(3)
-        try:
-            await message.delete()
-        except:
-            pass
+        await asyncio.sleep(2)
+        await message.delete()
 
 # ================================
-# 🚀 BULLETPROOF LAUNCH
+# FIXED CLEAN LOGIN
 # ================================
-async def safe_login():
-    print("🔥 **Stealth Launch...**")
+async def force_login():
+    print("🔥 **FORCE LOGIN**")
     
-    # Multiple login attempts
-    for attempt in range(3):
-        try:
-            print(f"🔄 Login attempt {attempt + 1}/3")
-            bot = StealthSelfBot()
-            await bot.login(TOKEN)
-            await bot.connect(reconnect=True)
-            return
-        except discord.LoginFailure:
-            print("❌ **LOGIN FAILED** - Token issue")
-            break
-        except Exception as e:
-            print(f"⚠️  Attempt {attempt + 1} error: {str(e)[:100]}")
-            await asyncio.sleep(2)
+    if not await UltimateSelfBot().test_token():
+        print("❌ **TOKEN DEAD**")
+        return
     
-    print("💥 **ALL LOGIN METHODS FAILED**")
-    print("🔧 Fix: New token needed")
+    client = UltimateSelfBot()
+    
+    try:
+        # Clean session
+        await client.login(TOKEN)
+        await client.connect()
+    except Exception as e:
+        print(f"💥 LOGIN ERROR: {e}")
+        # Force cleanup
+        gc.collect()
 
 if __name__ == '__main__':
-    try:
-        asyncio.run(safe_login())
-    except KeyboardInterrupt:
-        print("\n👋 Shutdown")
-    except Exception as e:
-        print(f"💥 Fatal: {e}")
+    print("🚀 **ULTIMATE SELF-BOT**")
+    asyncio.run(force_login())
