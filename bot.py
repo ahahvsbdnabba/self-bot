@@ -16,8 +16,8 @@ class SelfBot(discord.Client):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.command_prefix = '.'
-        self.auto_replies = {}       # trigger -> response
-        self.mention_reply = None   # custom mention reply message (None = disabled)
+        self.auto_replies = {}
+        self.mention_reply = None
 
     async def on_ready(self):
         print(f"""
@@ -32,22 +32,20 @@ class SelfBot(discord.Client):
         await self.change_presence(status=discord.Status.dnd)
 
     async def on_message(self, message):
-        # ── Handle auto‑replies to OTHER users ──
+        # Handle auto-replies to OTHER users
         if message.author != self.user:
-            # Custom mention reply
             if self.mention_reply and self.user in message.mentions:
                 await message.reply(self.mention_reply)
                 return
 
-            # Custom trigger‑based auto‑replies
             content_lower = message.content.lower().strip()
             for trigger, response in self.auto_replies.items():
                 if trigger in content_lower:
                     await message.reply(response)
                     return
-            return  # ignore other messages from others
+            return
 
-        # ── Only process commands from YOURSELF ──
+        # Process commands from YOURSELF
         content = message.content
         if not content.startswith(self.command_prefix):
             return
@@ -58,35 +56,33 @@ class SelfBot(discord.Client):
         try:
             # ── HELP ──
             if cmd == 'help':
-                embed = discord.Embed(
-                    title="🔥 Self-Bot Commands",
-                    description="Prefix: `.`",
-                    color=0x00ff00
-                )
-                embed.add_field(name="-- Basic --", value="""
+                help_text = """🔥 **Self-Bot Commands**
+Prefix: `.`
+
+**-- Basic --**
 `.ping` - Test connection
 `.help` - This menu
 `.invite` - Bot invite
 `.feedback <text>` - Send feedback
 `.report <text>` - Report an issue
 `.bug <desc>` - Report a bug
-""", inline=False)
-                embed.add_field(name="-- AutoReply & Mention --", value="""
+
+**-- AutoReply & Mention --**
 `.autoreply <trigger> | <response>` - Set custom auto-reply
 `.autoreply list` - List all auto-replies
 `.autoreply remove <trigger>` - Remove one
 `.autoreply clear` - Clear all
 `.replymention <message>` - Set mention reply
 `.replymention off` - Disable mention reply
-""", inline=False)
-                embed.add_field(name="-- Ping & DM --", value="""
+
+**-- Ping & DM --**
 `.pinguser @user <msg>` - Ping user with message
 `.massping <count> @user` - Ping user multiple times (max 10)
 `.dm @user <msg>` - Send DM
 `.everyone <msg>` - @everyone ping
 `.mentionrole <role> <msg>` - Ping a role
-""", inline=False)
-                embed.add_field(name="-- Fun --", value="""
+
+**-- Fun --**
 `.8ball <question>` - Magic 8ball
 `.joke` - Random joke
 `.coinflip` - Flip a coin
@@ -102,8 +98,8 @@ class SelfBot(discord.Client):
 `.slap @user` - Slap someone
 `.say <text>` - Make me say something
 `.embed <title> | <desc>` - Create an embed
-""", inline=False)
-                embed.add_field(name="-- Info --", value="""
+
+**-- Info --**
 `.avatar @user` - Get avatar
 `.serverinfo` - Server info
 `.userinfo @user` - User info
@@ -112,8 +108,8 @@ class SelfBot(discord.Client):
 `.viewrole` - All roles in server
 `.emoji` - List all server emojis
 `.guilds` - List all servers
-""", inline=False)
-                embed.add_field(name="-- Utility --", value="""
+
+**-- Utility --**
 `.weather <city>` - Weather info (placeholder)
 `.define <word>` - Dictionary definition
 `.urban <term>` - Urban Dictionary
@@ -125,8 +121,8 @@ class SelfBot(discord.Client):
 `.poll <Q> | <opt1> | <opt2>` - Create a poll
 `.clear <count>` - Delete your messages
 `.purge <count>` - Same as clear
-""", inline=False)
-                embed.add_field(name="-- Mod / Server --", value="""
+
+**-- Mod / Server --**
 `.nick <name>` - Change your nickname
 `.slowmode <sec>` - Set channel slowmode
 `.topic <text>` - Change channel topic
@@ -135,10 +131,8 @@ class SelfBot(discord.Client):
 `.copy @user` - Copy user's last message
 `.stealemoji <emoji>` - Add custom emoji to server
 `.roleadd @user @role` - Add role
-`.roleremove @user @role` - Remove role
-""", inline=False)
-                embed.set_footer(text="Bot by h61g")
-                await message.reply(embed=embed, delete_after=60)
+`.roleremove @user @role` - Remove role"""
+                await message.reply(help_text)
 
             # ── ReplyMention ──
             elif cmd == 'replymention':
@@ -158,12 +152,7 @@ class SelfBot(discord.Client):
             # ── AutoReply System ──
             elif cmd == 'autoreply':
                 if not args:
-                    embed = discord.Embed(title="AutoReply Commands", color=0x00ff00)
-                    embed.add_field(name="Set", value="`.autoreply trigger | response`", inline=False)
-                    embed.add_field(name="List", value="`.autoreply list`", inline=False)
-                    embed.add_field(name="Remove", value="`.autoreply remove <trigger>`", inline=False)
-                    embed.add_field(name="Clear", value="`.autoreply clear`", inline=False)
-                    await message.reply(embed=embed)
+                    await message.reply("**AutoReply Commands:**\n`.autoreply trigger | response` - Set\n`.autoreply list` - List all\n`.autoreply remove <trigger>` - Remove one\n`.autoreply clear` - Clear all")
                     return
                 parts = args.split('|', 1)
                 action = parts[0].strip().lower()
@@ -384,20 +373,17 @@ class SelfBot(discord.Client):
             # ── Guilds ──
             elif cmd == 'guilds':
                 guilds = [f"• {g.name} ({g.member_count})" for g in self.guilds[:20]]
-                embed = discord.Embed(title=f"📡 Servers ({len(self.guilds)})", description="\n".join(guilds), color=0x00ff00)
-                await message.reply(embed=embed)
+                await message.reply(f"**📡 Servers ({len(self.guilds)})**\n" + "\n".join(guilds))
 
             # ── Channelinfo ──
             elif cmd == 'channelinfo':
                 ch = message.channel
-                embed = discord.Embed(title=f"# {ch.name}", color=0x00ff00)
-                embed.add_field(name="ID", value=ch.id, inline=True)
-                embed.add_field(name="Type", value=str(ch.type), inline=True)
+                info = f"**# {ch.name}**\nID: {ch.id}\nType: {str(ch.type)}\n"
                 if hasattr(ch, 'topic') and ch.topic:
-                    embed.add_field(name="Topic", value=ch.topic[:100], inline=False)
-                embed.add_field(name="Category", value=ch.category.name if ch.category else "None", inline=True)
-                embed.add_field(name="Slowmode", value=f"{ch.slowmode_delay}s" if ch.slowmode_delay else "Off", inline=True)
-                await message.reply(embed=embed)
+                    info += f"Topic: {ch.topic[:100]}\n"
+                info += f"Category: {ch.category.name if ch.category else 'None'}\n"
+                info += f"Slowmode: {ch.slowmode_delay}s" if ch.slowmode_delay else "Slowmode: Off"
+                await message.reply(info)
 
             # ── Role Add / Remove ──
             elif cmd == 'roleadd':
@@ -464,7 +450,6 @@ class SelfBot(discord.Client):
             await message.channel.send(f'❌ Error: {str(e)}', delete_after=10)
 
     async def handle_old_commands(self, message, cmd, args):
-        """Reuse previous command logic – same as before."""
         if cmd == 'ping':
             await message.reply('🚀 **Pong!**')
         elif cmd == '8ball':
@@ -582,38 +567,23 @@ class SelfBot(discord.Client):
                 await message.reply("❌ Usage: `.embed Title | Description`")
                 return
             parts = args.split('|', 1)
-            embed = discord.Embed(title=parts[0].strip(), description=parts[1].strip(), color=0x00ff00)
-            await message.channel.send(embed=embed)
+            await message.channel.send(f"**{parts[0].strip()}**\n{parts[1].strip()}")
         elif cmd == 'avatar':
             user = message.mentions[0] if message.mentions else message.author
-            embed = discord.Embed(title=f"🖼️ {user.display_name}'s Avatar", color=0x00ff00)
-            embed.set_image(url=user.display_avatar.url)
-            await message.reply(embed=embed)
+            await message.reply(f"🖼️ **{user.display_name}'s Avatar**\n{user.display_avatar.url}")
         elif cmd == 'serverinfo':
             if not message.guild:
                 await message.reply("❌ Only works in a server.")
                 return
             g = message.guild
-            embed = discord.Embed(title=g.name, color=0x00ff00)
-            embed.add_field(name="ID", value=g.id, inline=True)
-            embed.add_field(name="Owner", value=g.owner.mention, inline=True)
-            embed.add_field(name="Members", value=g.member_count, inline=True)
-            embed.add_field(name="Channels", value=len(g.channels), inline=True)
-            embed.add_field(name="Roles", value=len(g.roles), inline=True)
-            embed.add_field(name="Created", value=g.created_at.strftime("%b %d, %Y"), inline=True)
-            if g.icon:
-                embed.set_thumbnail(url=g.icon.url)
-            await message.reply(embed=embed)
+            info = f"**{g.name}**\nID: {g.id}\nOwner: {g.owner}\nMembers: {g.member_count}\nChannels: {len(g.channels)}\nRoles: {len(g.roles)}\nCreated: {g.created_at.strftime('%b %d, %Y')}"
+            await message.reply(info)
         elif cmd == 'userinfo':
             user = message.mentions[0] if message.mentions else message.author
-            embed = discord.Embed(title=f"👤 {user.display_name}", color=0x00ff00)
-            embed.add_field(name="ID", value=user.id, inline=True)
-            embed.add_field(name="Username", value=user.name, inline=True)
-            embed.add_field(name="Joined Discord", value=user.created_at.strftime("%b %d, %Y"), inline=True)
+            info = f"**👤 {user.display_name}**\nID: {user.id}\nUsername: {user.name}\nJoined Discord: {user.created_at.strftime('%b %d, %Y')}"
             if hasattr(user, 'joined_at') and user.joined_at:
-                embed.add_field(name="Joined Server", value=user.joined_at.strftime("%b %d, %Y"), inline=True)
-            embed.set_thumbnail(url=user.display_avatar.url)
-            await message.reply(embed=embed)
+                info += f"\nJoined Server: {user.joined_at.strftime('%b %d, %Y')}"
+            await message.reply(info)
         elif cmd == 'roleinfo':
             if not message.guild:
                 await message.reply("❌ Only works in a server.")
@@ -630,27 +600,20 @@ class SelfBot(discord.Client):
             if not role:
                 await message.reply("❌ Role not found.")
                 return
-            embed = discord.Embed(title=f"🎭 Role: {role.name}", color=role.color)
-            embed.add_field(name="ID", value=role.id, inline=True)
-            embed.add_field(name="Color", value=role.color.to_hex(), inline=True)
-            embed.add_field(name="Members", value=len(role.members), inline=True)
-            embed.add_field(name="Position", value=role.position, inline=True)
-            embed.add_field(name="Hoisted", value=role.hoist, inline=True)
-            embed.add_field(name="Mentionable", value=role.mentionable, inline=True)
-            await message.reply(embed=embed)
+            await message.reply(f"**🎭 Role: {role.name}**\nID: {role.id}\nColor: #{role.color.value:06x}\nMembers: {len(role.members)}\nPosition: {role.position}\nHoisted: {role.hoist}\nMentionable: {role.mentionable}")
         elif cmd == 'viewrole':
             if not message.guild:
                 await message.reply("❌ Only works in a server.")
                 return
             roles = message.guild.roles[1:]
             if len(roles) > 30:
-                await message.reply(f"📋 This server has **{len(roles)}** roles. Showing first 30:")
                 roles = roles[:30]
+                msg = f"📋 This server has **{len(message.guild.roles)-1}** roles. Showing first 30:\n"
             else:
-                await message.reply(f"📋 **{len(roles)} roles:**")
+                msg = f"📋 **{len(roles)} roles:**\n"
             for role in roles:
-                color_hex = role.color.to_hex() if role.color.value != 0 else "#000000"
-                await message.channel.send(f"`{role.name}` | `{role.id}` | `{color_hex}`")
+                msg += f"`{role.name}` | `{role.id}` | `#{role.color.value:06x}`\n"
+            await message.reply(msg)
         elif cmd == 'emoji':
             if not message.guild:
                 await message.reply("❌ Only works in a server.")
