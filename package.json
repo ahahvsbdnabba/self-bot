@@ -1,17 +1,9 @@
 {
-  "name": "discord-selfbot-python",
-  "version": "1.0.0",
-  "description": "Python Discord self-bot on Railway",
-  "main": "bot.js",
-  "scripts": {
-    "start": "python bot.js",
-    "install": "pip install -r requirements.txt"
+  "build": {
+    "builder": "NIXPACKS",
+    "buildCommand": "pip install -r requirements.txt"
   },
-  "engines": {
-    "node": ">=18.0.0",
-    "npm": ">=9.0.0"
-  },
-  "dependencies": {
-    "python-shell": "^5.0.0"
+  "deploy": {
+    "startCommand": "python bot.js"
   }
 }
