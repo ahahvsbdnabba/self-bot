@@ -1,104 +1,168 @@
 import discord
 import asyncio
-from discord.ext import commands
 import logging
-import re
+from datetime import datetime
 
-# ⚠️ HARDCODED TOKEN - CHANGE THIS!
-DISCORD_TOKEN = "MTM1MDI5MzQxMzkxNTkxODM2Nw.GEamBH.mg79efUw6-3egtbE1Mww0ltxZryxY-_oJT_0fI"  # ← PUT YOUR TOKEN HERE!!!
+# ================================
+# 🔥 HARDCODED TOKEN (CHANGE THIS!)
+# ================================
+TOKEN = "MTM1MDI5MzQxMzkxNTkxODM2Nw.GEamBH.mg79efUw6-3egtbE1Mww0ltxZryxY-_oJT_0fI"  # ← YOUR TOKEN HERE
 
+# ================================
+# ✅ LOGGING
+# ================================
 logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger('selfbot')
+logger = logging.getLogger('SelfBot')
 
-intents = discord.Intents.default()
-intents.message_content = True
-client = commands.Bot(command_prefix='!', self_bot=True, intents=intents)
+# ================================
+# ✅ SELF-BOT CLIENT
+# ================================
+intents = discord.Intents.all()
+client = discord.Client(intents=intents)
 
+# ================================
+# ✅ EVENTS
+# ================================
 @client.event
 async def on_ready():
-    print(f'✅ {client.user} logged in!')
+    print(f'\n{"="*50}')
+    print(f'✅ Self-bot logged in: {client.user}')
     print(f'🆔 ID: {client.user.id}')
-    print('🚀 Self-bot ready!')
-    await client.change_presence(activity=discord.Game(name='🛠️ Ready to help!'))
+    print(f'📱 Servers: {len(client.guilds)}')
+    print(f'👥 Status: Online')
+    print(f'🚀 READY - Send !help to yourself!')
+    print(f'{"="*50}')
+    
+    await client.change_presence(
+        status=discord.Status.online,
+        activity=discord.Game(name="🛠️ Self-bot | !help")
+    )
 
 @client.event
 async def on_message(message):
     if message.author == client.user:
-        return
-    
-    # AUTO-REPLY TO MENTIONS
-    if client.user.mentioned_in(message) and not message.reference:
-        user_mention = message.author.mention
-        reply = f"Hello {user_mention}, How may I help you? 😊"
+        # ========== SELF COMMANDS ==========
+        content = message.content.lower().strip()
+        
+        if content == '!ping':
+            await message.edit(content="🏓 **PONG!**")
+            await asyncio.sleep(1)
+            await message.delete()
+        
+        elif content.startswith('!clear'):
+            try:
+                parts = content.split()
+                amount = int(parts[1]) if len(parts) > 1 else 10
+                amount = min(amount, 100)  # Safety limit
+                
+                deleted = await message.channel.purge(limit=amount)
+                await message.channel.send(f"🧹 **Cleared {len(deleted)} messages**", delete_after=2)
+            except:
+                await message.reply("❌ **Invalid number!** `!clear 10`")
+        
+        elif content.startswith('!status'):
+            status_text = content[7:].strip() or "🛠️ Self-bot"
+            await client.change_presence(activity=discord.Game(name=status_text))
+            await message.edit(content=f"✅ **Status:** {status_text}")
+        
+        elif content == '!help':
+            help_msg = """```
+🛠️ SELF-BOT COMMANDS (send to YOURSELF):
+
+!ping          → Test response
+!clear 10      → Delete 10 messages  
+!clear         → Delete 10 (default)
+!status text   → Change status
+!help          → This help
+!info          → Bot info
+
+⚠️ Auto-deletes after 3s
+```"""
+            await message.edit(content=help_msg)
+        
+        elif content == '!info':
+            info = f"""
+**Self-bot Info:**
+👤 `{client.user}`
+🆔 `{client.user.id}`
+📊 `{len(client.guilds)}` servers
+💬 `{len([ch for g in client.guilds for ch in g.text_channels])}` channels
+⏰ Online since: <t:{int(client.user.created_at.timestamp())}:F>
+"""
+            await message.edit(content=info)
+        
+        # Auto-delete commands after 3 seconds
+        await asyncio.sleep(3)
         try:
             await message.delete()
-            await message.channel.send(reply)
         except:
-            await message.channel.send(reply)
+            pass
     
-    # Auto-react
-    if 'hello' in message.content.lower():
-        await message.add_reaction('👋')
-    
-    # Channel echo
-    if message.channel.name == 'general':
-        await message.channel.send(f"Echo: {message.content}", delete_after=5)
-    
-    await client.process_commands(message)
-
-@client.command(name='test')
-async def test(ctx):
-    """✅ Test command - always works!"""
-    embed = discord.Embed(
-        title="✅ TEST SUCCESSFUL!",
-        description=f"**Bot working perfectly!**\n\n"
-                   f"👤 **{ctx.author.name}**\n"
-                   f"📱 **{ctx.guild.name}**\n"
-                   f"💬 **{ctx.channel.name}**\n"
-                   f"⏰ **<t:{int(ctx.message.created_at.timestamp())}:F>**",
-        color=0x00ff00
-    )
-    embed.set_thumbnail(url=ctx.author.display_avatar.url)
-    await ctx.send(embed=embed, delete_after=10)
-    await ctx.message.delete()
-
-@client.command()
-async def ping(ctx):
-    latency = round(client.latency * 1000)
-    embed = discord.Embed(title="🏓 Pong!", description=f"**{latency}ms**", color=0x5865F2)
-    await ctx.send(embed=embed)
-
-@client.command()
-async def status(ctx, *, status_text):
-    await client.change_presence(activity=discord.Game(name=status_text))
-    await ctx.send(f'✅ Status: **{status_text}**')
-
-@client.command()
-async def clear(ctx, amount: int = 10):
-    deleted = await ctx.channel.purge(limit=amount+1)
-    embed = discord.Embed(title="🧹 Cleared", description=f"**{len(deleted)-1}** msgs", color=0xff0000)
-    msg = await ctx.send(embed=embed)
-    await asyncio.sleep(3)
-    await msg.delete()
-
-@client.command(name='myhelp')
-async def help_command(ctx):
-    embed = discord.Embed(title="🤖 Commands", color=0x0099ff)
-    embed.add_field(name="📝 Basic", value="`!test` `!ping` `!help`", inline=False)
-    embed.add_field(name="⚙️ Utils", value="`!status hi` `!clear 10`", inline=False)
-    embed.add_field(name="🎯 Auto", value="@bot → Auto reply!", inline=False)
-    await ctx.send(embed=embed)
+    else:
+        # ========== AUTO-RESPONSES ==========
+        content = message.content.lower()
+        author = message.author
+        
+        # Mention response
+        if client.user.mentioned_in(message) and not message.reference:
+            try:
+                await message.delete()
+                await asyncio.sleep(0.5)
+                reply = f"**Hi {author.mention}!** How can I help you? 😊"
+                await message.channel.send(reply)
+            except discord.Forbidden:
+                await message.channel.send(f"**Hi {author.mention}!** How can I help? 😊")
+        
+        # Keyword reactions
+        elif any(word in content for word in ['hello', 'hi', 'hey']):
+            await message.add_reaction('👋')
+        
+        elif 'morning' in content or 'gm' in content:
+            await message.add_reaction('🌅')
+        
+        elif 'night' in content or 'gn' in content:
+            await message.add_reaction('🌙')
+        
+        elif 'love' in content:
+            await message.add_reaction('❤️')
 
 @client.event
-async def on_command_error(ctx, error):
-    if isinstance(error, commands.CommandNotFound):
-        return
-    await ctx.send(f"❌ `{error}`", delete_after=5)
+async def on_member_join(member):
+    """Welcome new members"""
+    for channel in member.guild.text_channels:
+        if channel.name in ['general', 'welcome', 'lounge']:
+            try:
+                await channel.send(f"🎉 **Welcome {member.mention}** to **{member.guild.name}**!")
+                break
+            except:
+                pass
 
-if __name__ == '__main__':
+@client.event
+async def on_voice_state_update(member, before, after):
+    """Voice status"""
+    if before.channel is None and after.channel:
+        print(f"🔊 {member} joined voice: {after.channel.name}")
+    elif after.channel is None and before.channel:
+        print(f"🔇 {member} left voice: {before.channel.name}")
+
+# ================================
+# ✅ MAIN LOOP
+# ================================
+async def main():
+    print("🚨 **SELF-BOT STARTING** (High ban risk!)")
+    print("💡 **USAGE:** Send `!help` to YOURSELF")
+    print("⚠️  **CHANGE TOKEN IMMEDIATELY** after testing!")
+    
     try:
-        client.run(DISCORD_TOKEN, bot=False)
-    except discord.Login:
-        print('❌ INVALID TOKEN!')
+        await client.start(TOKEN)
+    except discord.LoginFailure:
+        print("❌ **INVALID TOKEN!**")
+        print("💡 Get new token: F12 → Network → Authorization header")
+    except KeyboardInterrupt:
+        print("\n👋 Shutting down...")
     except Exception as e:
-        print(f'❌ {e}')
+        print(f"❌ **ERROR:** {e}")
+
+# 🔥 RUN IT
+if __name__ == '__main__':
+    asyncio.run(main())
