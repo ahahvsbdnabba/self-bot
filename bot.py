@@ -2,143 +2,187 @@ import discord
 import asyncio
 import aiohttp
 import os
-import sys
-import re
+import random
+from datetime import datetime
+from discord.ext import commands, tasks
 
+# Bot token from environment (set DISCORD_TOKEN in your environment)
 TOKEN = os.getenv('DISCORD_TOKEN')
-if not TOKEN or len(TOKEN) < 50:
-    print("❌ INVALID TOKEN")
-    sys.exit(1)
+if not TOKEN:
+    print("❌ Set DISCORD_TOKEN environment variable!")
+    print("Get bot token: https://discord.com/developers/applications")
+    exit(1)
 
+# Bot setup
 intents = discord.Intents.default()
 intents.message_content = True
+intents.members = True
 
-class SelfBot(discord.Client):
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-    
-    async def on_ready(self):
-        print(f"""
+bot = commands.Bot(
+    command_prefix=['!', '.', '?'], 
+    intents=intents,
+    help_command=None
+)
+
+# Startup
+@bot.event
+async def on_ready():
+    print(f"""
 ╔══════════════════════════════════════════════╗
-║                ✅ LIVE & READY               ║
+║              🤖 {bot.user} ONLINE              ║
 ║                                              ║
-║ 👤 {self.user}                               ║
-║ 🆔 {self.user.id}                            ║
-║ 📡 {len(self.guilds)} servers                ║
+║ 🆔 ID: {bot.user.id}                           ║
+║ 📡 Servers: {len(bot.guilds)}                  ║
+║ 👥 Users: {len(bot.users)}                     ║
 ╚══════════════════════════════════════════════╝
-        """)
-        await self.change_presence(status=discord.Status.invisible)
+    """)
     
-    async def on_message(self, message):
-        # Ignore other users
-        if message.author != self.user:
-            return
-        
-        content = message.content.lower()
-        
-        # Auto-delete all own messages after 3 seconds
-        asyncio.create_task(self.delete_after(message, 3))
-        
-        # Command handling (prefix: .)
-        if not content.startswith('.'):
-            return
-        
-        cmd = content[1:].split()[0]  # Get command name
-        
-        try:
-            if cmd == 'ping':
-                await message.reply('🚀 **Pong!**', delete_after=3)
-            
-            elif cmd == 'help':
-                help_text = """
-**🔥 Self-Bot Commands (. prefix):**
-`.ping` - Test connection
-`.clear 10` - Delete 10 own messages
-`.status coding` - Set playing status  
-`.invisible` - Go invisible
-`.servers` - List servers
-                """
-                await message.reply(help_text, delete_after=10)
-            
-            elif cmd == 'clear':
-                count = 10
-                if len(message.content.split()) > 1:
-                    try:
-                        count = min(int(message.content.split()[1]), 100)
-                    except:
-                        count = 10
-                deleted = await self.clear_messages(message.channel, count)
-                await message.reply(f'🗑️ Deleted {len(deleted)} messages', delete_after=3)
-            
-            elif cmd == 'status':
-                status_text = 'online'
-                if len(message.content.split()) > 1:
-                    status_text = ' '.join(message.content.split()[1:])
-                await self.change_presence(activity=discord.Game(name=status_text))
-                await message.reply(f'✅ Status: **{status_text}**', delete_after=3)
-            
-            elif cmd == 'invisible':
-                await self.change_presence(status=discord.Status.invisible)
-                await message.reply('👻 **Invisible ON**', delete_after=3)
-            
-            elif cmd == 'servers':
-                servers = [f"• {guild.name}" for guild in self.guilds[:15]]
-                server_text = f"📡 **{len(self.guilds)} servers:**\n" + "\n".join(servers)
-                await message.reply(server_text, delete_after=10)
-                
-        except Exception as e:
-            await message.reply(f'❌ Error: {str(e)}', delete_after=5)
+    # Set status
+    await bot.change_presence(
+        activity=discord.Game(name="!help | discord.gg/yourserver"),
+        status=discord.Status.online
+    )
     
-    async def clear_messages(self, channel, limit=10):
-        """Delete own messages from channel"""
-        deleted = []
-        async for message in channel.history(limit=limit*2):
-            if message.author == self.user:
-                try:
-                    await message.delete()
-                    deleted.append(message)
-                    if len(deleted) >= limit:
-                        break
-                except:
-                    pass
-        return deleted
-    
-    async def delete_after(self, message, delay):
-        """Delete message after delay"""
-        await asyncio.sleep(delay)
-        try:
-            await message.delete()
-        except:
-            pass
+    # Start background tasks
+    status_loop.start()
 
+# Rotate status
+@tasks.loop(seconds=30)
+async def status_loop():
+    statuses = [
+        "coding in Python",
+        f"{len(bot.guilds)} servers",
+        "!help for commands",
+        "discord.py v2.3+"
+    ]
+    status = random.choice(statuses)
+    await bot.change_presence(activity=discord.Game(name=status))
+
+# Basic commands
+@bot.command(name='ping')
+async def ping(ctx):
+    """Test bot latency"""
+    latency = round(bot.latency * 1000)
+    embed = discord.Embed(
+        title="🏓 Pong!",
+        description=f"**{latency}ms**",
+        color=0x00ff00,
+        timestamp=datetime.utcnow()
+    )
+    embed.set_footer(text=f"Requested by {ctx.author}", icon_url=ctx.author.avatar.url if ctx.author.avatar else None)
+    await ctx.reply(embed=embed, mention_author=False)
+
+@bot.command(name='clear', aliases=['purge', 'clean'])
+@commands.has_permissions(manage_messages=True)
+async def clear(ctx, count: int = 10):
+    """Delete messages (bot owner only)"""
+    count = min(count, 100)
+    deleted = await ctx.channel.purge(limit=count, check=lambda m: not m.pinned)
+    embed = discord.Embed(
+        description=f"🗑️ **Deleted {len(deleted)} messages**",
+        color=0xffaa00
+    )
+    msg = await ctx.send(embed=embed)
+    await asyncio.sleep(3)
+    await msg.delete()
+
+@clear.error
+async def clear_error(ctx, error):
+    if isinstance(error, commands.MissingPermissions):
+        await ctx.reply("❌ **Missing permissions** (Manage Messages)", delete_after=5)
+
+@bot.command(name='status')
+@commands.is_owner()
+async def status(ctx, *, status_text: str = "online"):
+    """Change bot status (owner only)"""
+    await bot.change_presence(activity=discord.Game(name=status_text))
+    await ctx.reply(f"✅ **Status changed to:** `{status_text}`", delete_after=5)
+
+@bot.command(name='servers', aliases=['guilds'])
+async def servers(ctx):
+    """List servers bot is in"""
+    guild_list = []
+    for i, guild in enumerate(bot.guilds, 1):
+        member_count = guild.member_count or len(guild.members)
+        guild_list.append(f"{i}. **{guild.name}** ({member_count} members)")
+    
+    embed = discord.Embed(
+        title=f"📡 **{len(bot.guilds)} Servers**",
+        description="\n".join(guild_list[:10]),
+        color=0x0099ff
+    )
+    if len(bot.guilds) > 10:
+        embed.set_footer(text=f"... and {len(bot.guilds)-10} more")
+    
+    await ctx.reply(embed=embed, mention_author=False)
+
+@bot.command(name='avatar')
+async def avatar(ctx, member: discord.Member = None):
+    """Show user avatar"""
+    user = member or ctx.author
+    embed = discord.Embed(title=f"{user.display_name}'s Avatar", color=0x7289da)
+    embed.set_image(url=user.avatar.url if user.avatar else user.default_avatar.url)
+    await ctx.reply(embed=embed, mention_author=False)
+
+@bot.command(name='userinfo', aliases=['user'])
+async def userinfo(ctx, member: discord.Member = None):
+    """Show user information"""
+    user = member or ctx.author
+    embed = discord.Embed(title=f"👤 {user.display_name}", color=0x00ff00)
+    embed.set_thumbnail(url=user.avatar.url if user.avatar else user.default_avatar.url)
+    embed.add_field(name="ID", value=user.id, inline=True)
+    embed.add_field(name="Account Created", value=user.created_at.strftime("%Y-%m-%d"), inline=True)
+    embed.add_field(name="Joined Server", value=ctx.guild.joined_at.strftime("%Y-%m-%d") if hasattr(ctx.guild, 'joined_at') else "N/A", inline=True)
+    embed.add_field(name="Roles", value=len(user.roles)-1, inline=True)
+    embed.add_field(name="Top Role", value=user.top_role.mention, inline=True)
+    await ctx.reply(embed=embed, mention_author=False)
+
+@bot.command(name='help')
+async def help_command(ctx):
+    """Show all commands"""
+    embed = discord.Embed(title="🤖 Bot Commands", color=0x5865f2", description="**Prefix:** `!`, `.`, `?`", timestamp=datetime.utcnow())
+    
+    embed.add_field(
+        name="📊 **Info**",
+        value="`.ping` `.userinfo` `.avatar` `.servers`",
+        inline=False
+    )
+    embed.add_field(
+        name="🧹 **Moderation** (Admin)",
+        value="`.clear 10` `.status <text>`",
+        inline=False
+    )
+    embed.add_field(
+        name="ℹ️ **Support**",
+        value="[Invite Bot](https://discord.com/api/oauth2/authorize?client_id=YOUR_BOT_ID&permissions=8&scope=bot)",
+        inline=False
+    )
+    
+    embed.set_footer(text=f"Requested by {ctx.author}", icon_url=ctx.author.avatar.url if ctx.author.avatar else None)
+    await ctx.reply(embed=embed, mention_author=False)
+
+# Error handler
+@bot.event
+async def on_command_error(ctx, error):
+    if isinstance(error, commands.CommandNotFound):
+        return
+    elif isinstance(error, commands.MissingPermissions):
+        await ctx.reply("❌ **You don't have permission to use this command!**", delete_after=5)
+    elif isinstance(error, commands.MissingRequiredArgument):
+        await ctx.reply("❌ **Missing arguments!** Use `!help <command>`", delete_after=5)
+    else:
+        print(f"Error: {error}")
+        await ctx.reply("❌ **An error occurred!**", delete_after=5)
+
+# Run bot
 async def main():
-    print("🚀 Starting Self-Bot...")
-    
-    # Test token
-    async with aiohttp.ClientSession() as session:
-        async with session.get(
-            'https://discord.com/api/v9/users/@me',
-            headers={'Authorization': TOKEN}
-        ) as resp:
-            if resp.status != 200:
-                print("❌ Token invalid")
-                return
-            data = await resp.json()
-            print(f"✅ VALID: {data.get('username')}#{data.get('discriminator')}")
-    
-    bot = SelfBot(intents=intents)
-    
-    try:
+    async with bot:
         await bot.start(TOKEN)
-    except discord.LoginFailure:
-        print("❌ LOGIN FAILED - Token invalid or self-bot blocked")
-    except Exception as e:
-        print(f"💥 Error: {e}")
-    finally:
-        await bot.close()
 
 if __name__ == '__main__':
     try:
         asyncio.run(main())
     except KeyboardInterrupt:
-        print("\n👋 Shutdown")
+        print("\n👋 Bot shutting down...")
+    except Exception as e:
+        print(f"💥 Fatal error: {e}")
