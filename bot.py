@@ -1,141 +1,118 @@
 import discord
 import asyncio
-import requests
-import base64
-import json
+import os
+import random
+from discord.ext import commands
 
 # ================================
-# 🔥 YOUR EXACT HARDCODED TOKEN
+# 🔥 TOKEN FROM RAILWAY ENV VAR
 # ================================
-TOKEN = "mfa.MTM1MDI5MzQxMzkxNTkxODM2Nw.GEamBH.mg79efUw6-3egtbE1Mww0ltxZryxY-_oJT_0fI"
+TOKEN = os.getenv('DISCORD_TOKEN')
+if not TOKEN:
+    print("❌ Set DISCORD_TOKEN in Railway Variables")
+    exit(1)
 
-# ================================
-# ✅ MULTI-METHOD LOGIN
-# ================================
-class UltimateSelfBot(discord.Client):
+class SelfBot(discord.Client):
     def __init__(self):
         super().__init__(intents=discord.Intents.all())
     
-    async def test_token(self):
-        """Test token validity"""
-        headers = {"Authorization": TOKEN}
-        try:
-            r = requests.get("https://discord.com/api/v9/users/@me", headers=headers)
-            if r.status_code == 200:
-                user = r.json()
-                print(f"✅ **TOKEN VALID**: {user['username']}#{user['discriminator']}")
-                return True
-            else:
-                print(f"❌ **HTTP {r.status_code}**")
-                return False
-        except:
-            print("❌ **Token test failed**")
-            return False
-    
-    async def stealth_login(self):
-        """Stealth login with browser headers"""
-        discord.http._get_proxy = lambda: None
-        return await super().login(TOKEN)
-
-client = UltimateSelfBot()
-
-# ================================
-# ✅ EVENTS
-# ================================
-@client.event
-async def on_ready():
-    print(f"""
+    async def on_ready(self):
+        print(f"""
 ╔══════════════════════════════════════════════╗
-║                ✅ LIVE & WORKING             ║
-║                                             ║
-║ 👤 {client.user}                            ║
-║ 🆔 {client.user.id}                         ║
-║ 📡 {len(client.guilds)} servers             ║
-║                                             ║
-║ 🎯 **COMMANDS: Send !help to yourself**      ║
+║              🔥 SELF-BOT LIVE                 ║
+║                                              ║
+║ 👤 {self.user}                               ║
+║ 🆔 {self.user.id}                            ║
+║ 📡 {len(self.guilds)} servers                ║
+║                                              ║
+║ ⚠️  TOS VIOLATION - USE AT OWN RISK          ║
 ╚══════════════════════════════════════════════╝
-    """)
-
-@client.event
-async def on_message(message):
-    if message.author != client.user:
-        if client.user.mentioned_in(message):
-            await message.add_reaction('✅')
-        return
+        """)
+        
+        # Stealth status
+        await self.change_presence(status=discord.Status.invisible)
     
-    cmd = message.content.lower()
-    
-    # Commands
-    if '!ping' in cmd:
-        await message.edit(content='🏓 **PONG! WORKING!**')
-    
-    elif '!help' in cmd:
-        await message.edit(content='''**WORKING COMMANDS:**
+    async def on_message(self, message):
+        if message.author != self.user:
+            # Auto-react to your mentions
+            if self.user.mentioned_in(message):
+                await message.add_reaction('👍')
+            return
+        
+        content = message.content.lower()
+        
+        # DM Commands (send to yourself)
+        if '!ping' in content:
+            await message.edit(content='🏓 **Pong! Self-bot working**')
+        
+        elif '!clear' in content:
+            try:
+                count = 10
+                if content.split()[1:]:
+                    count = int(content.split()[1])
+                deleted = await message.channel.purge(limit=count)
+                await message.channel.send(f'🗑️ Deleted {len(deleted)} messages', delete_after=3)
+            except:
+                await message.reply('❌ No permission')
+        
+        elif '!status' in content:
+            statuses = ['coding', 'gaming', 'music', 'streaming']
+            status = random.choice(statuses)
+            await self.change_presence(activity=discord.Game(name=status))
+            await message.edit(content=f'✅ Status: **{status}**')
+        
+        elif '!invisible' in content:
+            await self.change_presence(status=discord.Status.invisible)
+            await message.edit(content='👻 **Invisible mode ON**')
+        
+        elif '!help' in content:
+            help_text = '''🔥 **SELF-BOT COMMANDS** (DM yourself)
 !ping
-!help
-!clear 5
-!status hi''')
-    
-    elif '!clear' in cmd:
+!clear [num]
+!status
+!invisible  
+!spam [text] [count]
+!deleteall'''
+            await message.edit(content=help_text)
+        
+        elif '!spam' in content:
+            parts = content.split(' ', 2)
+            if len(parts) >= 3:
+                text = parts[2]
+                count = int(parts[1])
+                for _ in range(count):
+                    await message.channel.send(text)
+                await message.delete()
+        
+        elif '!deleteall' in content:
+            async for msg in message.channel.history(limit=100):
+                if msg.author == self.user:
+                    try:
+                        await msg.delete()
+                    except:
+                        pass
+            await message.delete()
+        
+        # Auto-delete command after 3s
+        await asyncio.sleep(3)
         try:
-            await message.channel.purge(limit=10)
+            await message.delete()
         except:
-            await message.reply('❌ No perms')
-    
-    elif '!status' in cmd:
-        await client.change_presence(activity=discord.Game(name='self-bot'))
-        await message.edit(content='✅ Status changed')
-    
-    # Cleanup
-    await asyncio.sleep(2)
-    await message.delete()
+            pass
 
 # ================================
-# 🔥 TRIPLE LOGIN BYPASS
-# ================================
-async def force_login():
-    print("🔥 **FORCE LOGIN ATTEMPTS**")
-    
-    # Method 1: Token test
-    if not await client.test_token():
-        print("❌ **TOKEN DEAD**")
-        return
-    
-    # Method 2: Stealth login
-    try:
-        print("🔄 **Method 1: Stealth**")
-        await client.stealth_login()
-        await client.connect()
-        return
-    except:
-        print("❌ Method 1 failed")
-    
-    # Method 3: Raw headers
-    try:
-        print("🔄 **Method 2: Raw headers**")
-        discord.http.HTTPClient(None, loop=asyncio.get_event_loop()).session._session._default_headers = {
-            'User-Agent': 'Mozilla/5.0'
-        }
-        await client.login(TOKEN)
-        await client.connect()
-        return
-    except:
-        print("❌ Method 2 failed")
-    
-    # Method 4: Direct start
-    try:
-        print("🔄 **Method 3: Direct**")
-        await client.start(TOKEN)
-        return
-    except Exception as e:
-        print(f"💥 ALL METHODS FAILED: {e}")
-
-# ================================
-# ✅ EXECUTE
+# 🚀 STEALTH LAUNCH
 # ================================
 async def main():
-    await force_login()
+    print("🔥 **Launching Self-Bot...**")
+    selfbot = SelfBot()
+    
+    try:
+        await selfbot.start(TOKEN)
+    except discord.LoginFailure:
+        print("❌ **INVALID TOKEN**")
+    except Exception as e:
+        print(f"💥 Error: {e}")
 
 if __name__ == '__main__':
-    print("🚀 **ULTIMATE SELF-BOT**")
     asyncio.run(main())
