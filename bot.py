@@ -2,156 +2,167 @@ import discord
 import asyncio
 import aiohttp
 import os
+import sys
 import gc
-import ssl
 
-# Global cleanup
-aiohttp.client.DEFAULT_CLEANUP_CLOSED = True
+# Fix aiohttp issues
+if 'aiohttp' in sys.modules:
+    del sys.modules['aiohttp']
 
-# Get token from Railway
 TOKEN = os.getenv('DISCORD_TOKEN')
-if not TOKEN:
-    print("❌ No DISCORD_TOKEN in Railway variables")
-    exit(1)
+if not TOKEN or len(TOKEN) < 50:
+    print("❌ INVALID TOKEN FORMAT")
+    print("Must be ~59 chars, starts with letters/numbers")
+    sys.exit(1)
 
-# Auto-fix common token issues
-if TOKEN.startswith('Bot '):
-    print("🔧 Removing 'Bot ' prefix...")
-    TOKEN = TOKEN[4:]
-
-print(f"🔥 Self-bot starting... Token length: {len(TOKEN)}")
-print(f"🔍 Preview: {TOKEN[:12]}...{TOKEN[-8:]}")
+print(f"🔥 Token loaded: {len(TOKEN)} chars")
 
 class UltimateSelfBot(discord.Client):
     def __init__(self):
-        # Perfect connector for self-bots
+        # Perfect connector - no errors
         connector = aiohttp.TCPConnector(
             limit=10,
             limit_per_host=5,
             force_close=True,
-            enable_cleanup_closed=True,
-            use_dns_cache=True,
-            ssl=ssl.create_default_context()
+            enable_cleanup_closed=True
         )
         super().__init__(
-            intents=discord.Intents.default(),
-            connector=connector,
-            heartbeat_timeout=60.0
+            intents=discord.Intents.all(),
+            connector=connector
         )
     
+    async def test_token(self):
+        """Test token validity"""
+        async with aiohttp.ClientSession() as session:
+            async with session.get(
+                'https://discord.com/api/v9/users/@me',
+                headers={'Authorization': TOKEN}
+            ) as resp:
+                if resp.status == 200:
+                    data = await resp.json()
+                    print(f"✅ TOKEN VALID: {data.get('username')}#{data.get('discriminator')}")
+                    return True
+                print(f"❌ HTTP {resp.status}: Invalid token")
+                return False
+    
     async def close(self):
+        """Clean shutdown"""
         try:
-            if hasattr(self, 'http') and self.http.session:
+            if self.http and self.http.session:
                 await self.http.session.close()
         except: pass
         await super().close()
         gc.collect()
-        print("🧹 Cleaned up")
-    
-    async def on_connect(self):
-        print("🔗 Connected to gateway")
     
     async def on_ready(self):
         print(f"""
-╔══════════════════════════════════════╗
-║           ✅ SELF-BOT ONLINE          ║
-║                                      ║
-║ 👤 {self.user}                       ║
-║ 🆔 {self.user.id}                    ║
-║ 🌐 {len(self.guilds)} servers        ║
-║                                      ║
-║ 💬 DM these commands:                ║
-║   !ping  !help  !clear  !status      ║
-╚══════════════════════════════════════╝
+╔══════════════════════════════════════════════╗
+║                ✅ SELF-BOT LIVE               ║
+║                                              ║
+║ 👤 {self.user}                               ║
+║ 🆔 {self.user.id}                            ║
+║ 📡 {len(self.guilds)} servers                ║
+║                                              ║
+║ 🎯 DM COMMANDS: !ping !help !clear !status   ║
+╚══════════════════════════════════════════════╝
         """)
-        # Stay invisible
         await self.change_presence(status=discord.Status.invisible)
     
     async def on_message(self, message):
-        # Ignore other users
+        # Only respond to YOUR messages
         if message.author != self.user:
-            # Auto-react to your mentions
+            # Auto-react to mentions
             if self.user.mentioned_in(message):
                 try:
-                    await message.add_reaction('👋')
+                    await message.add_reaction('✅')
                 except: pass
             return
         
-        # Parse command
         cmd = message.content.lower().strip()
         
         # !ping
         if '!ping' in cmd:
-            await message.edit(content='🚀 **SELF-BOT 100% WORKING!**')
+            await message.edit(content='🚀 **SELF-BOT 100% WORKING!** 🏓')
         
         # !help
         elif '!help' in cmd:
-            await message.edit(content='''🔥 **COMMANDS** (DM only)
+            help_text = '''🔥 **ULTIMATE SELF-BOT COMMANDS**
 
-`!ping` - Test bot
-`!help` - This help
-`!clear 10` - Delete 10 msgs
-`!status coding` - Set status
-`!invisible` - Go invisible
-`!servers` - List servers
-`!cleanup` - Clean memory''')
+`!ping`           Test connection
+`!help`           This help
+`!clear 20`       Delete 20 messages  
+`!status coding`  Set custom status
+`!invisible`      Go invisible
+`!servers`        List servers
+`!test`           Check token
+`!cleanup`        Clean memory'''
+            await message.edit(content=help_text)
         
         # !clear
         elif '!clear' in cmd:
             try:
                 count = 10
                 parts = cmd.split()
-                if len(parts) > 1: 
-                    count = min(int(parts[1]), 50)
-                deleted = await message.channel.purge(limit=count+1)
-                await message.channel.send(f'🗑️ Deleted {len(deleted)-1}', delete_after=2)
+                if len(parts) > 1:
+                    count = min(int(parts[1]), 100)
+                deleted = await message.channel.purge(limit=count)
+                await message.channel.send(f'🗑️ **Deleted {len(deleted)}**', delete_after=3)
             except Exception as e:
-                await message.edit(content=f'❌ {str(e)[:30]}')
+                await message.reply(f'❌ **Error:** {str(e)[:50]}')
         
         # !status
         elif '!status' in cmd:
-            status = cmd.split(' ', 1)[1] if len(cmd.split()) > 1 else 'online'
-            await self.change_presence(activity=discord.Game(name=status[:30]))
-            await message.edit(content=f'✅ Status: {status}')
+            status_text = 'online'
+            parts = cmd.split(' ', 1)
+            if len(parts) > 1:
+                status_text = parts[1][:50]
+            await self.change_presence(activity=discord.Game(name=status_text))
+            await message.edit(content=f'✅ **Status:** {status_text}')
         
         # !invisible
         elif '!invisible' in cmd:
             await self.change_presence(status=discord.Status.invisible)
-            await message.edit(content='👻 Invisible ON')
+            await message.edit(content='👻 **Invisible mode ON**')
         
         # !servers
         elif '!servers' in cmd:
-            servers = '\n'.join([f'• {g.name}' for g in self.guilds[:10]])
-            await message.edit(content=f'📡 **{len(self.guilds)} servers:**\n{servers}')
+            servers = [f'• {guild.name}' for guild in self.guilds[:15]]
+            server_list = '\n'.join(servers)
+            await message.edit(content=f'📡 **{len(self.guilds)} servers:**\n{server_list}')
+        
+        # !test
+        elif '!test' in cmd:
+            valid = await self.test_token()
+            await message.edit(content=f'🔍 **Token:** {"✅ VALID" if valid else "❌ INVALID"}')
         
         # !cleanup
         elif '!cleanup' in cmd:
             gc.collect()
-            await message.edit(content='🧹 Memory cleaned')
+            await message.edit(content='🧹 **Memory cleaned**')
         
-        # Auto-delete command message
+        # Auto-delete command after 3s
         await asyncio.sleep(3)
         try:
             await message.delete()
         except: pass
 
-# Main launcher
 async def main():
-    print("🚀 **Ultimate Self-Bot**")
+    print("🚀 **Ultimate Self-Bot v2.0**")
+    
+    # Pre-test token
     bot = UltimateSelfBot()
+    if not await bot.test_token():
+        print("💥 Exiting - invalid token")
+        return
     
     try:
         await bot.start(TOKEN)
     except discord.LoginFailure:
-        print("\n❌ LOGIN FAILED")
-        print("💡 Get FRESH token:")
-        print("   1. discord.com → F12 → Network")
-        print("   2. Send message → 'messages' → Authorization")
-        print("   3. Copy FULL token to Railway")
+        print("❌ **LOGIN FAILED** - Token revoked")
     except KeyboardInterrupt:
-        print("\n👋 Shutdown")
+        print("\n👋 Shutting down...")
     except Exception as e:
-        print(f"💥 {type(e).__name__}: {e}")
+        print(f"💥 **ERROR:** {type(e).__name__}: {e}")
     finally:
         await bot.close()
 
