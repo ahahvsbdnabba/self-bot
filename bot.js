@@ -81,8 +81,8 @@ async def clear(ctx, amount: int = 10):
     await asyncio.sleep(3)
     await msg.delete()
 
-@client.command()
-async def help(ctx):
+@client.command(name='myhelp')
+async def help_command(ctx):
     embed = discord.Embed(title="🤖 Commands", color=0x0099ff)
     embed.add_field(name="📝 Basic", value="`!test` `!ping` `!help`", inline=False)
     embed.add_field(name="⚙️ Utils", value="`!status hi` `!clear 10`", inline=False)
