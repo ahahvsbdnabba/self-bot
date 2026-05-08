@@ -1,99 +1,94 @@
 import discord
 import asyncio
 import os
-import random
-from discord.ext import commands
+import aiohttp
+import sys
 
-# ================================
-# 🔥 TOKEN FROM RAILWAY ENV VAR
-# ================================
+# Fix aiohttp connector error
+if 'aiohttp' in sys.modules:
+    del sys.modules['aiohttp']
+
 TOKEN = os.getenv('DISCORD_TOKEN')
-if not TOKEN:
-    print("❌ Set DISCORD_TOKEN in Railway Variables")
-    exit(1)
+if not TOKEN or len(TOKEN) < 50:
+    print("❌ INVALID TOKEN FORMAT")
+    print("Must be ~59 chars, starts with letters/numbers")
+    sys.exit(1)
+
+print(f"🔥 Token loaded: {len(TOKEN)} chars")
 
 class SelfBot(discord.Client):
     def __init__(self):
-        super().__init__(intents=discord.Intents.all())
+        super().__init__(intents=discord.Intents.all(), 
+                        connector=aiohttp.TCPConnector(limit=0))
+    
+    async def test_token(self):
+        """Test token before login"""
+        async with aiohttp.ClientSession() as session:
+            async with session.get(
+                'https://discord.com/api/v9/users/@me',
+                headers={'Authorization': TOKEN}
+            ) as resp:
+                if resp.status == 200:
+                    data = await resp.json()
+                    print(f"✅ TOKEN VALID: {data.get('username', 'Unknown')}#{data.get('discriminator', '0000')}")
+                    return True
+                else:
+                    print(f"❌ HTTP {resp.status}: Invalid/revoked token")
+                    return False
     
     async def on_ready(self):
         print(f"""
 ╔══════════════════════════════════════════════╗
-║              🔥 SELF-BOT LIVE                 ║
+║                ✅ SELF-BOT LIVE               ║
 ║                                              ║
 ║ 👤 {self.user}                               ║
 ║ 🆔 {self.user.id}                            ║
 ║ 📡 {len(self.guilds)} servers                ║
-║                                              ║
-║ ⚠️  TOS VIOLATION - USE AT OWN RISK          ║
 ╚══════════════════════════════════════════════╝
         """)
-        
-        # Stealth status
         await self.change_presence(status=discord.Status.invisible)
     
     async def on_message(self, message):
         if message.author != self.user:
-            # Auto-react to your mentions
-            if self.user.mentioned_in(message):
-                await message.add_reaction('👍')
             return
         
-        content = message.content.lower()
+        cmd = message.content.lower().strip()
         
-        # DM Commands (send to yourself)
-        if '!ping' in content:
-            await message.edit(content='🏓 **Pong! Self-bot working**')
+        if cmd == '!ping':
+            await message.edit(content='🏓 **PONG! 100% WORKING!**')
         
-        elif '!clear' in content:
+        elif cmd.startswith('!clear'):
             try:
                 count = 10
-                if content.split()[1:]:
-                    count = int(content.split()[1])
+                if len(cmd.split()) > 1:
+                    count = min(int(cmd.split()[1]), 100)
                 deleted = await message.channel.purge(limit=count)
-                await message.channel.send(f'🗑️ Deleted {len(deleted)} messages', delete_after=3)
+                await message.channel.send(f'🗑️ Deleted {len(deleted)}', delete_after=2)
             except:
-                await message.reply('❌ No permission')
+                await message.reply('❌ No perms')
         
-        elif '!status' in content:
-            statuses = ['coding', 'gaming', 'music', 'streaming']
-            status = random.choice(statuses)
-            await self.change_presence(activity=discord.Game(name=status))
-            await message.edit(content=f'✅ Status: **{status}**')
+        elif cmd == '!help':
+            await message.edit(content='''**🔥 COMMANDS** (DM yourself)
+`!ping` - Test
+`!clear 20` - Delete messages
+`!invisible` - Hide status
+`!status coding` - Change status
+`!test` - Token check''')
         
-        elif '!invisible' in content:
+        elif cmd == '!invisible':
             await self.change_presence(status=discord.Status.invisible)
-            await message.edit(content='👻 **Invisible mode ON**')
+            await message.edit(content='👻 **Invisible ON**')
         
-        elif '!help' in content:
-            help_text = '''🔥 **SELF-BOT COMMANDS** (DM yourself)
-!ping
-!clear [num]
-!status
-!invisible  
-!spam [text] [count]
-!deleteall'''
-            await message.edit(content=help_text)
+        elif cmd.startswith('!status'):
+            status = cmd.split(' ', 1)[1] if len(cmd.split()) > 1 else 'online'
+            await self.change_presence(activity=discord.Game(name=status))
+            await message.edit(content=f'✅ **Status: {status}**')
         
-        elif '!spam' in content:
-            parts = content.split(' ', 2)
-            if len(parts) >= 3:
-                text = parts[2]
-                count = int(parts[1])
-                for _ in range(count):
-                    await message.channel.send(text)
-                await message.delete()
+        elif cmd == '!test':
+            valid = await self.test_token()
+            await message.edit(content=f'🔍 **Token valid:** {"✅ YES" if valid else "❌ NO"}')
         
-        elif '!deleteall' in content:
-            async for msg in message.channel.history(limit=100):
-                if msg.author == self.user:
-                    try:
-                        await msg.delete()
-                    except:
-                        pass
-            await message.delete()
-        
-        # Auto-delete command after 3s
+        # Auto-delete after 3 seconds
         await asyncio.sleep(3)
         try:
             await message.delete()
@@ -101,18 +96,28 @@ class SelfBot(discord.Client):
             pass
 
 # ================================
-# 🚀 STEALTH LAUNCH
+# 🚀 CLEAN LAUNCH
 # ================================
 async def main():
     print("🔥 **Launching Self-Bot...**")
+    
+    # Test token first
     selfbot = SelfBot()
+    valid = await selfbot.test_token()
+    
+    if not valid:
+        print("💥 Cannot proceed - fix DISCORD_TOKEN")
+        return
     
     try:
         await selfbot.start(TOKEN)
     except discord.LoginFailure:
-        print("❌ **INVALID TOKEN**")
+        print("❌ LOGIN FAILED - Token revoked")
     except Exception as e:
         print(f"💥 Error: {e}")
 
 if __name__ == '__main__':
-    asyncio.run(main())
+    try:
+        asyncio.run(main())
+    except KeyboardInterrupt:
+        print("\n👋 Shutting down...")
