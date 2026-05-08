@@ -18,7 +18,7 @@ class SelfBot(discord.Client):
         self.command_prefix = '.'
         self.auto_replies = {}       # trigger -> response
         self.mention_reply = None   # custom mention reply message (None = disabled)
-    
+
     async def on_ready(self):
         print(f"""
 ╔══════════════════════════════════════════════╗
@@ -29,32 +29,32 @@ class SelfBot(discord.Client):
 ║ 📡 {len(self.guilds)} servers                ║
 ╚══════════════════════════════════════════════╝
         """)
-        # Set DND status on startup
         await self.change_presence(status=discord.Status.dnd)
-    
+
     async def on_message(self, message):
-        if message.author == self.user:
-            return
-        
-        # Custom mention reply (if set via .replymention)
-        if self.mention_reply and self.user in message.mentions:
-            await message.reply(self.mention_reply)
-            return
-        
-        # Custom auto-replies (trigger-based)
-        content_lower = message.content.lower().strip()
-        for trigger, response in self.auto_replies.items():
-            if trigger in content_lower:
-                await message.reply(response)
+        # ── Handle auto‑replies to OTHER users ──
+        if message.author != self.user:
+            # Custom mention reply
+            if self.mention_reply and self.user in message.mentions:
+                await message.reply(self.mention_reply)
                 return
-        
-        # Command processing
-        if not content_lower.startswith(self.command_prefix):
+
+            # Custom trigger‑based auto‑replies
+            content_lower = message.content.lower().strip()
+            for trigger, response in self.auto_replies.items():
+                if trigger in content_lower:
+                    await message.reply(response)
+                    return
+            return  # ignore other messages from others
+
+        # ── Only process commands from YOURSELF ──
+        content = message.content
+        if not content.startswith(self.command_prefix):
             return
-        
-        cmd = content_lower[1:].split()[0].lower()
-        args = message.content[len(self.command_prefix)+len(cmd):].strip()
-        
+
+        cmd = content[1:].split()[0].lower()
+        args = content[len(self.command_prefix)+len(cmd):].strip()
+
         try:
             # ── HELP ──
             if cmd == 'help':
@@ -139,7 +139,7 @@ class SelfBot(discord.Client):
 """, inline=False)
                 embed.set_footer(text="Bot by h61g")
                 await message.reply(embed=embed, delete_after=60)
-            
+
             # ── ReplyMention ──
             elif cmd == 'replymention':
                 if not args:
@@ -154,7 +154,7 @@ class SelfBot(discord.Client):
                 else:
                     self.mention_reply = args.strip()
                     await message.reply(f"✅ Mention reply set to: \"{self.mention_reply[:100]}{'...' if len(self.mention_reply)>100 else ''}\"")
-            
+
             # ── AutoReply System ──
             elif cmd == 'autoreply':
                 if not args:
@@ -194,7 +194,7 @@ class SelfBot(discord.Client):
                     response = parts[1].strip()
                     self.auto_replies[trigger] = response
                     await message.reply(f"✅ Auto-reply set: `{trigger}` → \"{response[:50]}{'...' if len(response)>50 else ''}\"")
-            
+
             # ── PingUser ──
             elif cmd == 'pinguser':
                 if not message.mentions:
@@ -203,7 +203,7 @@ class SelfBot(discord.Client):
                 user = message.mentions[0]
                 msg = args.replace(message.mentions[0].mention, '').strip() if message.mentions else ''
                 await message.channel.send(f"{user.mention} {msg}" if msg else user.mention)
-            
+
             # ── MassPing ──
             elif cmd == 'massping':
                 parts = args.split()
@@ -226,7 +226,7 @@ class SelfBot(discord.Client):
                     await message.channel.send(target.mention)
                     await asyncio.sleep(0.3)
                 await message.delete()
-            
+
             # ── DM ──
             elif cmd == 'dm':
                 if not message.mentions:
@@ -242,14 +242,14 @@ class SelfBot(discord.Client):
                     await message.reply(f"✉️ DM sent to {user.mention}")
                 except:
                     await message.reply("❌ Could not DM that user.")
-            
+
             # ── Everyone ──
             elif cmd == 'everyone':
                 if not args:
                     await message.reply("Usage: `.everyone <message>`")
                     return
                 await message.channel.send(f"@everyone {args}")
-            
+
             # ── MentionRole ──
             elif cmd == 'mentionrole':
                 parts = args.split(maxsplit=1)
@@ -272,7 +272,7 @@ class SelfBot(discord.Client):
                     await message.reply(f"❌ Role `{role_name}` not found.")
                     return
                 await message.channel.send(f"{role.mention} {text}")
-            
+
             # ── Nick ──
             elif cmd == 'nick':
                 if not args:
@@ -286,7 +286,7 @@ class SelfBot(discord.Client):
                     await message.reply(f"✅ Nickname changed to `{args[:32]}`")
                 except:
                     await message.reply("❌ Cannot change nickname.")
-            
+
             # ── React ──
             elif cmd == 'react':
                 if not args:
@@ -301,7 +301,7 @@ class SelfBot(discord.Client):
                             await message.reply("❌ Invalid emoji.")
                         return
                 await message.reply("❌ No bot message found to react to.")
-            
+
             # ── Slowmode ──
             elif cmd == 'slowmode':
                 if not args:
@@ -316,7 +316,7 @@ class SelfBot(discord.Client):
                     await message.reply(f"✅ Slowmode set to {seconds}s")
                 except:
                     await message.reply("❌ Invalid number.")
-            
+
             # ── Topic ──
             elif cmd == 'topic':
                 if not args:
@@ -327,7 +327,7 @@ class SelfBot(discord.Client):
                     await message.reply("✅ Channel topic updated.")
                 except:
                     await message.reply("❌ Cannot change topic.")
-            
+
             # ── Rename ──
             elif cmd == 'rename':
                 if not args:
@@ -339,7 +339,7 @@ class SelfBot(discord.Client):
                     await message.reply(f"✅ Channel renamed to `{new_name}`")
                 except:
                     await message.reply("❌ Cannot rename.")
-            
+
             # ── Copy ──
             elif cmd == 'copy':
                 if not message.mentions:
@@ -351,7 +351,7 @@ class SelfBot(discord.Client):
                         await message.channel.send(f"**{user.display_name} said:** {msg.content}")
                         return
                 await message.reply("❌ No recent message from that user.")
-            
+
             # ── StealEmoji ──
             elif cmd == 'stealemoji':
                 if not args:
@@ -380,13 +380,13 @@ class SelfBot(discord.Client):
                     await message.reply("❌ No permission to create emojis.")
                 except:
                     await message.reply("❌ Failed to add emoji.")
-            
+
             # ── Guilds ──
             elif cmd == 'guilds':
                 guilds = [f"• {g.name} ({g.member_count})" for g in self.guilds[:20]]
                 embed = discord.Embed(title=f"📡 Servers ({len(self.guilds)})", description="\n".join(guilds), color=0x00ff00)
                 await message.reply(embed=embed)
-            
+
             # ── Channelinfo ──
             elif cmd == 'channelinfo':
                 ch = message.channel
@@ -398,7 +398,7 @@ class SelfBot(discord.Client):
                 embed.add_field(name="Category", value=ch.category.name if ch.category else "None", inline=True)
                 embed.add_field(name="Slowmode", value=f"{ch.slowmode_delay}s" if ch.slowmode_delay else "Off", inline=True)
                 await message.reply(embed=embed)
-            
+
             # ── Role Add / Remove ──
             elif cmd == 'roleadd':
                 parts = args.split(maxsplit=1)
@@ -425,7 +425,7 @@ class SelfBot(discord.Client):
                     await message.reply(f"✅ Added {role.mention} to {user.mention}")
                 except:
                     await message.reply("❌ Cannot add role.")
-            
+
             elif cmd == 'roleremove':
                 parts = args.split(maxsplit=1)
                 if len(parts) < 2 or not message.mentions:
@@ -451,18 +451,18 @@ class SelfBot(discord.Client):
                     await message.reply(f"✅ Removed {role.mention} from {user.mention}")
                 except:
                     await message.reply("❌ Cannot remove role.")
-            
+
             # ── Existing commands ──
             elif cmd in ('ping', '8ball', 'joke', 'coinflip', 'roll', 'choose', 'rps', 'cat', 'dog', 'meme', 'quote', 'fact', 'hug', 'slap', 'say', 'embed', 'avatar', 'serverinfo', 'userinfo', 'roleinfo', 'viewrole', 'emoji', 'weather', 'define', 'urban', 'translate', 'shorten', 'qr', 'timer', 'remind', 'poll', 'clear', 'purge', 'invite', 'feedback', 'report', 'bug'):
                 await self.handle_old_commands(message, cmd, args)
-            
+
             else:
                 await message.reply(f"❌ Unknown command `{cmd}`. Use `.help` for the list.")
-        
+
         except Exception as e:
             print(f"Error: {e}")
             await message.channel.send(f'❌ Error: {str(e)}', delete_after=10)
-    
+
     async def handle_old_commands(self, message, cmd, args):
         """Reuse previous command logic – same as before."""
         if cmd == 'ping':
@@ -758,7 +758,7 @@ class SelfBot(discord.Client):
             await message.reply(f"🐛 Bug reported: *{args or 'empty'}*")
         else:
             await message.reply(f"❌ Unknown command `{cmd}`.")
-    
+
     async def clear_messages(self, channel, limit=10):
         deleted = []
         async for msg in channel.history(limit=limit*2):
@@ -774,7 +774,7 @@ class SelfBot(discord.Client):
 
 async def main():
     print("🚀 Starting Self-Bot...")
-    
+
     async with aiohttp.ClientSession() as session:
         async with session.get(
             'https://discord.com/api/v9/users/@me',
@@ -785,9 +785,9 @@ async def main():
                 return
             data = await resp.json()
             print(f"✅ VALID: {data.get('username')}#{data.get('discriminator')}")
-    
+
     bot = SelfBot()
-    
+
     try:
         await bot.start(TOKEN)
     except discord.LoginFailure:
