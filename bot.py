@@ -42,7 +42,6 @@ class SelfBot(discord.Client):
                 if len(content) <= split_by:
                     parts.append(content)
                     break
-                # try to split at newline if possible
                 split_at = content.rfind('\n', 0, split_by)
                 if split_at == -1:
                     split_at = split_by
@@ -60,12 +59,10 @@ class SelfBot(discord.Client):
             pass
 
     async def on_message(self, message):
-        # Handle auto-replies to OTHER users
         if message.author != self.user:
             if self.mention_reply and self.user in message.mentions:
                 await message.reply(self.mention_reply)
                 return
-
             content_lower = message.content.lower().strip()
             for trigger, response in self.auto_replies.items():
                 if trigger in content_lower:
@@ -73,7 +70,6 @@ class SelfBot(discord.Client):
                     return
             return
 
-        # Process commands from YOURSELF
         content = message.content
         if not content.startswith(self.command_prefix):
             return
@@ -81,11 +77,9 @@ class SelfBot(discord.Client):
         cmd = content[1:].split()[0].lower()
         args = content[len(self.command_prefix)+len(cmd):].strip()
 
-        # Schedule deletion of the trigger message
         asyncio.create_task(self.delete_trigger(message))
 
         try:
-            # ── HELP ──
             if cmd == 'help':
                 help1 = """🔥 **Self-Bot Commands (1/2)**
 Prefix: `.`
@@ -108,7 +102,7 @@ Prefix: `.`
 
 **-- Ping & DM --**
 `.pinguser @user <msg>` - Ping user with message
-`.massping <count> @user` - Ping user multiple times (max 10)
+`.massping <count> @user` - Ping user multiple times (max 100)
 `.dm @user <msg>` - Send DM
 `.everyone <msg>` - @everyone ping
 `.mentionrole <role> <msg>` - Ping a role
@@ -155,17 +149,9 @@ Prefix: `.`
 `.clear <count>` - Delete your messages
 `.purge <count>` - Same as clear
 
-**-- Mod / Server --**
-`.nick <name>` - Change your nickname
-`.slowmode <sec>` - Set channel slowmode
-`.topic <text>` - Change channel topic
-`.rename <name>` - Rename channel
-`.react <emoji>` - React to last bot message
-`.copy @user` - Copy user's last message
-`.stealemoji <emoji>` - Add custom emoji to server
-`.roleadd @user @role` - Add role
-`.roleremove @user @role` - Remove role
-`.code` - Generate staff role Lua table as file"""
+**-- File Generators --**
+`.code` - Generate staff role Lua table (RoleNames + Permissions)
+`.tag` - Generate staff role Lua table (Tags + CustomChatTag)"""
                 await self.send_long(message, help1)
                 await self.send_long(message, help2)
 
@@ -243,13 +229,12 @@ Prefix: `.`
                     await message.reply("❌ Mention someone.")
                     return
                 target = message.mentions[0]
-                if count > 10:
-                    await message.reply("❌ Max 10 pings allowed.")
+                if count > 100:
+                    await message.reply("❌ Max 100 pings allowed.")
                     return
                 for _ in range(count):
                     await message.channel.send(target.mention)
                     await asyncio.sleep(0.3)
-                # No need to delete trigger; already scheduled
 
             # ── DM ──
             elif cmd == 'dm':
@@ -474,12 +459,11 @@ Prefix: `.`
                 except:
                     await message.reply("❌ Cannot remove role.")
 
-            # ── VIEWROLE (fixed) ──
+            # ── VIEWROLE ──
             elif cmd == 'viewrole':
                 if not message.guild:
                     await message.reply("❌ Only works in a server.")
                     return
-                # Get all roles except @everyone, sorted by position descending (highest first)
                 roles = sorted(
                     [r for r in message.guild.roles if r.name != "@everyone"],
                     key=lambda r: r.position,
@@ -490,40 +474,35 @@ Prefix: `.`
                 current = f"📋 **{count} roles** (highest first):\n"
                 for role in roles:
                     line = f"`{role.name}` | `{role.id}` | `#{role.color.value:06x}`\n"
-                    # If adding this line would exceed 2000 chars, save current and start new
-                    if len(current) + len(line) > 1900:  # safety margin
+                    if len(current) + len(line) > 1900:
                         msg_parts.append(current)
                         current = ""
                     current += line
                 if current:
                     msg_parts.append(current)
-                # Send each part
                 for i, part in enumerate(msg_parts):
                     if i == 0:
                         await message.reply(part)
                     else:
                         await message.channel.send(part)
 
-            # ── CODE (Lua RoleNames + Permissions as file) ──
+            # ── CODE (RoleNames + Permissions) ──
             elif cmd == 'code':
                 if not message.guild:
                     await message.reply("❌ Only works in a server.")
                     return
 
-                # Get all roles except @everyone, sorted highest first
                 all_roles = sorted(
                     [r for r in message.guild.roles if r.name != "@everyone"],
                     key=lambda r: r.position,
                     reverse=True
                 )
 
-                # Filter to "staff" roles – exclude those starting with '[' and separators
                 staff_roles = [
                     r for r in all_roles
                     if not r.name.startswith('[') and not r.name.strip('▬') == ''
                 ]
 
-                # Build RoleNames Lua table
                 lines = ["RoleNames = {"]
                 for role in staff_roles:
                     lines.append(f'    ["{role.name}"] = {role.id},')
@@ -535,12 +514,54 @@ Prefix: `.`
                 lines.append("},")
 
                 content = "\n".join(lines)
-
-                # Create file in memory
                 file = discord.File(io.BytesIO(content.encode('utf-8')), filename="message.txt")
                 await message.reply("✅ Here's your Lua table:", file=file)
 
-            # ── Existing commands ──
+            # ── TAG (Tags + CustomChatTag) ──
+            elif cmd == 'tag':
+                if not message.guild:
+                    await message.reply("❌ Only works in a server.")
+                    return
+
+                all_roles = sorted(
+                    [r for r in message.guild.roles if r.name != "@everyone"],
+                    key=lambda r: r.position,
+                    reverse=True
+                )
+
+                staff_roles = [
+                    r for r in all_roles
+                    if not r.name.startswith('[') and not r.name.strip('▬') == ''
+                ]
+
+                # Build Tags array
+                lines = ["Tags = {"]
+                for role in staff_roles:
+                    color = role.color
+                    r, g, b = color.r, color.g, color.b
+                    lines.append(f"        {{")
+                    lines.append(f"            tag = '{role.name}',")
+                    lines.append(f"            color = '{r}, {g}, {b}',")
+                    lines.append(f"            role = {role.id}")
+                    lines.append(f"        }},")
+                lines.append("    },")
+                lines.append("")
+                # Static CustomChatTag block (from example)
+                lines.append("    CustomChatTag = {")
+                lines.append("        role = 1380648059679281353,")
+                lines.append("        tag = {")
+                lines.append("            min = 2,")
+                lines.append("            max = 15")
+                lines.append("        },")
+                lines.append("        blacklisted = { 'nigger','rap3','ni33ers','faggot','fag','niglet','chode','nigga','n!gaa','f@g','nsfw' }")
+                lines.append("    },")
+                lines.append("},")
+
+                content = "\n".join(lines)
+                file = discord.File(io.BytesIO(content.encode('utf-8')), filename="message.txt")
+                await message.reply("✅ Here's your Tags table:", file=file)
+
+            # ── Existing old commands ──
             elif cmd in ('ping', '8ball', 'joke', 'coinflip', 'roll', 'choose', 'rps', 'cat', 'dog', 'meme', 'quote', 'fact', 'hug', 'slap', 'say', 'embed', 'avatar', 'serverinfo', 'userinfo', 'roleinfo', 'emoji', 'weather', 'define', 'urban', 'translate', 'shorten', 'qr', 'timer', 'remind', 'poll', 'clear', 'purge', 'invite', 'feedback', 'report', 'bug'):
                 await self.handle_old_commands(message, cmd, args)
 
