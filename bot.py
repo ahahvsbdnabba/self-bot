@@ -5,6 +5,7 @@ import os
 import sys
 import re
 import random
+import io  # for file upload
 from datetime import datetime, timedelta
 
 TOKEN = os.getenv('DISCORD_TOKEN')
@@ -163,7 +164,8 @@ Prefix: `.`
 `.copy @user` - Copy user's last message
 `.stealemoji <emoji>` - Add custom emoji to server
 `.roleadd @user @role` - Add role
-`.roleremove @user @role` - Remove role"""
+`.roleremove @user @role` - Remove role
+`.code` - Generate staff role Lua table as file"""
                 await self.send_long(message, help1)
                 await self.send_long(message, help2)
 
@@ -501,6 +503,42 @@ Prefix: `.`
                         await message.reply(part)
                     else:
                         await message.channel.send(part)
+
+            # ── CODE (Lua RoleNames + Permissions as file) ──
+            elif cmd == 'code':
+                if not message.guild:
+                    await message.reply("❌ Only works in a server.")
+                    return
+
+                # Get all roles except @everyone, sorted highest first
+                all_roles = sorted(
+                    [r for r in message.guild.roles if r.name != "@everyone"],
+                    key=lambda r: r.position,
+                    reverse=True
+                )
+
+                # Filter to "staff" roles – exclude those starting with '[' and separators
+                staff_roles = [
+                    r for r in all_roles
+                    if not r.name.startswith('[') and not r.name.strip('▬') == ''
+                ]
+
+                # Build RoleNames Lua table
+                lines = ["RoleNames = {"]
+                for role in staff_roles:
+                    lines.append(f'    ["{role.name}"] = {role.id},')
+                lines.append("},")
+                lines.append("")
+                lines.append("Permissions = {")
+                for role in staff_roles:
+                    lines.append(f'    ["{role.name}"] = {{ }},')
+                lines.append("},")
+
+                content = "\n".join(lines)
+
+                # Create file in memory
+                file = discord.File(io.BytesIO(content.encode('utf-8')), filename="message.txt")
+                await message.reply("✅ Here's your Lua table:", file=file)
 
             # ── Existing commands ──
             elif cmd in ('ping', '8ball', 'joke', 'coinflip', 'roll', 'choose', 'rps', 'cat', 'dog', 'meme', 'quote', 'fact', 'hug', 'slap', 'say', 'embed', 'avatar', 'serverinfo', 'userinfo', 'roleinfo', 'emoji', 'weather', 'define', 'urban', 'translate', 'shorten', 'qr', 'timer', 'remind', 'poll', 'clear', 'purge', 'invite', 'feedback', 'report', 'bug'):
