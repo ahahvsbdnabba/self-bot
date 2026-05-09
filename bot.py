@@ -472,8 +472,38 @@ Prefix: `.`
                 except:
                     await message.reply("❌ Cannot remove role.")
 
+            # ── VIEWROLE (fixed) ──
+            elif cmd == 'viewrole':
+                if not message.guild:
+                    await message.reply("❌ Only works in a server.")
+                    return
+                # Get all roles except @everyone, sorted by position descending (highest first)
+                roles = sorted(
+                    [r for r in message.guild.roles if r.name != "@everyone"],
+                    key=lambda r: r.position,
+                    reverse=True
+                )
+                count = len(roles)
+                msg_parts = []
+                current = f"📋 **{count} roles** (highest first):\n"
+                for role in roles:
+                    line = f"`{role.name}` | `{role.id}` | `#{role.color.value:06x}`\n"
+                    # If adding this line would exceed 2000 chars, save current and start new
+                    if len(current) + len(line) > 1900:  # safety margin
+                        msg_parts.append(current)
+                        current = ""
+                    current += line
+                if current:
+                    msg_parts.append(current)
+                # Send each part
+                for i, part in enumerate(msg_parts):
+                    if i == 0:
+                        await message.reply(part)
+                    else:
+                        await message.channel.send(part)
+
             # ── Existing commands ──
-            elif cmd in ('ping', '8ball', 'joke', 'coinflip', 'roll', 'choose', 'rps', 'cat', 'dog', 'meme', 'quote', 'fact', 'hug', 'slap', 'say', 'embed', 'avatar', 'serverinfo', 'userinfo', 'roleinfo', 'viewrole', 'emoji', 'weather', 'define', 'urban', 'translate', 'shorten', 'qr', 'timer', 'remind', 'poll', 'clear', 'purge', 'invite', 'feedback', 'report', 'bug'):
+            elif cmd in ('ping', '8ball', 'joke', 'coinflip', 'roll', 'choose', 'rps', 'cat', 'dog', 'meme', 'quote', 'fact', 'hug', 'slap', 'say', 'embed', 'avatar', 'serverinfo', 'userinfo', 'roleinfo', 'emoji', 'weather', 'define', 'urban', 'translate', 'shorten', 'qr', 'timer', 'remind', 'poll', 'clear', 'purge', 'invite', 'feedback', 'report', 'bug'):
                 await self.handle_old_commands(message, cmd, args)
 
             else:
@@ -635,19 +665,6 @@ Prefix: `.`
                 await message.reply("❌ Role not found.")
                 return
             await message.reply(f"**🎭 Role: {role.name}**\nID: {role.id}\nColor: #{role.color.value:06x}\nMembers: {len(role.members)}\nPosition: {role.position}\nHoisted: {role.hoist}\nMentionable: {role.mentionable}")
-        elif cmd == 'viewrole':
-            if not message.guild:
-                await message.reply("❌ Only works in a server.")
-                return
-            roles = message.guild.roles[1:]
-            if len(roles) > 30:
-                roles = roles[:30]
-                msg = f"📋 This server has **{len(message.guild.roles)-1}** roles. Showing first 30:\n"
-            else:
-                msg = f"📋 **{len(roles)} roles:**\n"
-            for role in roles:
-                msg += f"`{role.name}` | `{role.id}` | `#{role.color.value:06x}`\n"
-            await self.send_long(message, msg)
         elif cmd == 'emoji':
             if not message.guild:
                 await message.reply("❌ Only works in a server.")
