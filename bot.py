@@ -5,7 +5,7 @@ import os
 import sys
 import re
 import random
-import io  # for file upload
+import io
 from datetime import datetime, timedelta
 
 TOKEN = os.getenv('DISCORD_TOKEN')
@@ -33,7 +33,6 @@ class SelfBot(discord.Client):
         await self.change_presence(status=discord.Status.dnd)
 
     async def send_long(self, channel_or_message, content, split_by=2000):
-        """Splits content into multiple messages if too long."""
         if len(content) <= split_by:
             await channel_or_message.reply(content)
         else:
@@ -51,7 +50,6 @@ class SelfBot(discord.Client):
                 await channel_or_message.reply(part)
 
     async def delete_trigger(self, message, delay=5):
-        """Deletes the trigger message after a delay."""
         await asyncio.sleep(delay)
         try:
             await message.delete()
@@ -150,8 +148,8 @@ Prefix: `.`
 `.purge <count>` - Same as clear
 
 **-- File Generators --**
-`.code` - Generate staff role Lua table (RoleNames + Permissions)
-`.tag` - Generate staff role Lua table (Tags + CustomChatTag)"""
+`.code` - Generate staff RoleNames + Permissions
+`.tag` - Generate staff Tags + CustomChatTag"""
                 await self.send_long(message, help1)
                 await self.send_long(message, help2)
 
@@ -486,100 +484,108 @@ Prefix: `.`
                     else:
                         await message.channel.send(part)
 
-            # ── CODE (RoleNames + Permissions – only staff roles) ──
-elif cmd == 'code':
-    if not message.guild:
-        await message.reply("❌ Only works in a server.")
-        return
+            # ── CODE (RoleNames + Permissions – only the 31 staff roles) ──
+            elif cmd == 'code':
+                if not message.guild:
+                    await message.reply("❌ Only works in a server.")
+                    return
 
-    # Exact staff role names from your example (order doesn't matter, but we'll keep it)
-    staff_role_names = [
-        "Founder", "blood", "Owner", "Co Owner", "CEO", "Developer", "Superior",
-        "Server Director", "Staff Director", "Supervisor", "Head Operations",
-        "Operations", "Executive", "Overseer", "Server Management", "Head Management",
-        "Senior Management", "Management", "Trial Management", "Community Management",
-        "Head Of Staff", "Lead Administrator", "Head Administrator", "Senior Administrator",
-        "Administrator", "Head Moderator", "Senior Moderator", "Moderator",
-        "Noclip Access", "Gang Noclip", "Head Wager Admin", "Wager Admin",
-        "Coin"  # Note: "Coin" is in Permissions but not in original RoleNames? Check your example: coin role not in RoleNames but exists in Permissions. I'll add it here.
-    ]
+                # Exact staff roles you want
+                staff_roles = [
+                    "Founder", "blood", "Owner", "Co Owner", "CEO", "Developer", "Superior",
+                    "Server Director", "Staff Director", "Supervisor", "Head Operations",
+                    "Operations", "Executive", "Overseer", "Server Management", "Head Management",
+                    "Senior Management", "Management", "Trial Management", "Community Management",
+                    "Head Of Staff", "Lead Administrator", "Head Administrator", "Senior Administrator",
+                    "Administrator", "Head Moderator", "Senior Moderator", "Moderator",
+                    "Trial Moderator", "DANGER (ABOVE ALL)"
+                ]
 
-    # Permissions exactly as you wrote them
-    permissions_data = {
-        "Founder": [ 'immune','doorlock', 'givecar','givecoin', 'sendback', 'offlineban', 'comserv', 'tpm', 'teleport', 'revive', 'kick', 'freeze', 'spawnvehicle', 'repairvehicle', 'cleanvehicle', 'flipvehicle', 'staffchat', 'clearchat', 'coords', 'slap', 'banwipe', 'endcomserv', 'ban', 'offlineban', 'clearinventory', 'clearloadout', 'spectate', 'unban', 'entitywipe', 'heal', 'godmode', 'invisible', 'noclip', 'giveweapon', 'givemoney', 'giveitem', 'setgang', 'setjob', 'skin', 'announce', 'keyall' ],
-        "blood": [ 'immune','doorlock', 'givecar','givecoin', 'sendback', 'offlineban', 'comserv', 'tpm', 'teleport', 'revive', 'kick', 'freeze', 'spawnvehicle', 'repairvehicle', 'cleanvehicle', 'flipvehicle', 'staffchat', 'clearchat', 'coords', 'slap', 'banwipe', 'endcomserv', 'ban', 'offlineban', 'clearinventory', 'clearloadout', 'spectate', 'unban', 'entitywipe', 'heal', 'godmode', 'invisible', 'noclip', 'giveweapon', 'givemoney', 'giveitem', 'setgang', 'setjob', 'skin', 'announce', 'keyall' ],
-        "Owner": [ 'immune', 'doorlock', 'givecar','givecoin', 'sendback', 'offlineban', 'comserv', 'tpm', 'teleport', 'revive', 'kick', 'freeze', 'spawnvehicle', 'repairvehicle', 'cleanvehicle', 'flipvehicle', 'staffchat', 'clearchat', 'coords', 'slap', 'banwipe', 'endcomserv', 'ban', 'offlineban', 'clearinventory', 'clearloadout', 'spectate', 'unban', 'entitywipe', 'heal', 'godmode', 'invisible', 'noclip', 'giveweapon', 'givemoney', 'giveitem', 'setgang', 'setjob', 'skin', 'announce', 'keyall' ],
-        "Co Owner": [ 'immune', 'doorlock', 'givecar', 'offlineban','givecoin', 'sendback', 'comserv', 'tpm', 'teleport', 'revive', 'kick', 'freeze', 'spawnvehicle', 'repairvehicle', 'cleanvehicle', 'flipvehicle', 'staffchat', 'clearchat', 'coords', 'slap', 'banwipe', 'endcomserv', 'ban', 'offlineban', 'clearinventory', 'clearloadout', 'spectate', 'unban', 'entitywipe', 'heal', 'godmode', 'invisible', 'noclip', 'giveweapon', 'givemoney', 'giveitem', 'setgang', 'setjob', 'skin', 'announce', 'keyall' ],
-        "CEO": [ 'doorlock', 'givecar', 'offlineban','givecoin', 'sendback', 'comserv', 'tpm', 'teleport', 'revive', 'kick', 'freeze', 'spawnvehicle', 'repairvehicle', 'cleanvehicle', 'flipvehicle', 'staffchat', 'clearchat', 'coords', 'slap', 'banwipe', 'endcomserv', 'ban', 'offlineban', 'clearinventory', 'clearloadout', 'spectate', 'unban', 'entitywipe', 'heal', 'godmode', 'invisible', 'noclip', 'giveweapon', 'givemoney', 'giveitem', 'setgang', 'setjob', 'skin', 'announce', 'keyall' ],
-        "Superior": [ 'doorlock', 'givecar', 'offlineban','givecoin', 'sendback', 'comserv', 'tpm', 'teleport', 'revive', 'kick', 'freeze', 'spawnvehicle', 'repairvehicle', 'cleanvehicle', 'flipvehicle', 'staffchat', 'clearchat', 'coords', 'slap', 'banwipe', 'endcomserv', 'ban', 'offlineban', 'clearinventory', 'clearloadout', 'spectate', 'unban', 'entitywipe', 'heal', 'godmode', 'invisible', 'noclip', 'giveweapon', 'givemoney', 'giveitem', 'setgang', 'setjob', 'skin', 'announce', 'keyall' ],
-        "Server Director": [ 'givecar', 'offlineban', 'sendback', 'comserv', 'tpm', 'teleport', 'revive', 'kick', 'freeze', 'spawnvehicle', 'repairvehicle', 'cleanvehicle', 'flipvehicle', 'staffchat', 'clearchat', 'coords', 'slap', 'banwipe', 'endcomserv', 'ban', 'offlineban', 'clearinventory', 'clearloadout', 'spectate', 'unban', 'entitywipe', 'heal', 'godmode', 'invisible', 'noclip', 'giveweapon', 'givemoney', 'giveitem', 'setgang', 'setjob', 'skin', 'announce', 'keyall' ],
-        "Staff Director": [ 'givecar', 'offlineban', 'sendback', 'comserv', 'tpm', 'teleport', 'revive', 'kick', 'freeze', 'spawnvehicle', 'repairvehicle', 'cleanvehicle', 'flipvehicle', 'staffchat', 'clearchat', 'coords', 'slap', 'banwipe', 'endcomserv', 'ban', 'offlineban', 'clearinventory', 'clearloadout', 'spectate', 'unban', 'entitywipe', 'heal', 'godmode', 'invisible', 'noclip', 'giveweapon', 'givemoney', 'giveitem', 'setgang', 'setjob', 'skin', 'announce', 'keyall' ],
-        "Supervisor": [ 'givecar', 'offlineban', 'sendback', 'comserv', 'tpm', 'teleport', 'revive', 'kick', 'freeze', 'spawnvehicle', 'repairvehicle', 'cleanvehicle', 'flipvehicle', 'staffchat', 'clearchat', 'coords', 'slap', 'banwipe', 'endcomserv', 'ban', 'offlineban', 'clearinventory', 'clearloadout', 'spectate', 'unban', 'entitywipe', 'heal', 'godmode', 'invisible', 'noclip', 'giveweapon', 'givemoney', 'giveitem', 'setgang', 'setjob', 'skin', 'announce', 'keyall' ],
-        "Head Operations": [ 'givecar', 'offlineban', 'sendback', 'comserv', 'tpm', 'teleport', 'revive', 'kick', 'freeze', 'spawnvehicle', 'repairvehicle', 'cleanvehicle', 'flipvehicle', 'staffchat', 'clearchat', 'coords', 'slap', 'banwipe', 'endcomserv', 'ban', 'offlineban', 'clearinventory', 'clearloadout', 'spectate', 'unban', 'entitywipe', 'heal', 'godmode', 'invisible', 'noclip', 'giveweapon', 'givemoney', 'giveitem', 'setgang', 'setjob', 'skin', 'announce', 'keyall' ],
-        "Operations": [ 'givecar', 'offlineban', 'sendback', 'comserv', 'tpm', 'teleport', 'revive', 'kick', 'freeze', 'spawnvehicle', 'repairvehicle', 'cleanvehicle', 'flipvehicle', 'staffchat', 'clearchat', 'coords', 'slap', 'banwipe', 'endcomserv', 'ban', 'offlineban', 'clearinventory', 'clearloadout', 'spectate', 'unban', 'entitywipe', 'heal', 'godmode', 'invisible', 'noclip', 'giveweapon', 'givemoney', 'giveitem', 'setgang', 'setjob', 'skin', 'announce', 'keyall' ],
-        "Executive": [ 'givecar',  'offlineban','sendback', 'comserv', 'tpm', 'teleport', 'revive', 'kick', 'freeze', 'spawnvehicle', 'repairvehicle', 'cleanvehicle', 'flipvehicle', 'staffchat', 'clearchat', 'coords', 'slap', 'banwipe', 'endcomserv', 'ban', 'offlineban', 'clearinventory', 'clearloadout', 'spectate', 'unban', 'entitywipe', 'heal', '', 'invisible', 'noclip', 'giveweapon', 'givemoney', 'giveitem', 'setgang', 'setjob', 'skin', 'announce', 'keyall' ],
-        "Developer": [ 'doorlock', 'offlineban', 'givecar', 'sendback', 'comserv', 'tpm', 'teleport', 'revive', 'kick', 'freeze', 'spawnvehicle', 'repairvehicle', 'cleanvehicle', 'flipvehicle', 'staffchat', 'clearchat', 'coords', 'slap', 'banwipe', 'endcomserv', 'ban', 'offlineban', 'clearinventory', 'clearloadout', 'spectate', 'unban', 'entitywipe', 'heal', 'godmode', 'invisible', 'noclip', 'giveweapon', 'givemoney', 'giveitem', 'setgang', 'setjob', 'skin', 'announce', 'keyall' ],
-        "Overseer": [ 'givecar', 'offlineban', 'sendback', 'comserv', 'tpm', 'teleport', 'revive', 'kick', 'freeze', 'spawnvehicle', 'repairvehicle', 'cleanvehicle', 'flipvehicle', 'staffchat', 'clearchat', 'coords', 'slap', 'banwipe', 'endcomserv', 'ban', 'offlineban', 'clearinventory', 'clearloadout', 'spectate', 'unban', 'entitywipe', 'heal', '', 'invisible', 'noclip', 'giveweapon', 'givemoney', 'giveitem', 'setgang', 'setjob', 'skin', 'announce', 'keyall' ],
-        "Server Management": [ 'givecar', 'offlineban', 'sendback', 'comserv', 'tpm', 'teleport', 'revive', 'kick', 'freeze', 'spawnvehicle', 'repairvehicle', 'cleanvehicle', 'flipvehicle', 'staffchat', 'clearchat', 'coords', 'slap', 'banwipe', 'endcomserv', 'ban', 'offlineban', 'clearinventory', 'clearloadout', 'spectate', 'unban', 'entitywipe', 'heal', '', 'invisible', 'noclip', 'giveweapon', 'givemoney', 'giveitem', 'setgang', 'setjob', 'skin', 'announce', 'keyall' ],
-        "Head Management": [ 'givecar', 'offlineban', 'sendback', 'comserv', 'tpm', 'teleport', 'revive', 'kick', 'freeze', 'spawnvehicle', 'repairvehicle', 'cleanvehicle', 'flipvehicle', 'staffchat', 'clearchat', 'coords', 'slap', 'endcomserv', 'ban', 'offlineban', 'clearinventory', 'clearloadout', 'spectate', 'unban', 'entitywipe', 'heal', 'invisible', 'noclip', 'giveweapon', 'giveitem', 'setgang', 'setjob', 'skin', 'announce', 'keyall' ],
-        "Senior Management": [ 'givecar', 'offlineban', 'sendback', 'comserv', 'tpm', 'teleport', 'revive', 'kick', 'freeze', 'spawnvehicle', 'repairvehicle', 'cleanvehicle', 'flipvehicle', 'staffchat', 'clearchat', 'coords', 'slap', 'endcomserv', 'ban', 'offlineban', 'clearinventory', 'clearloadout', 'spectate', 'unban', 'entitywipe', 'heal', 'invisible', 'noclip', 'giveweapon', 'giveitem', 'setgang', 'setjob', 'skin', 'announce', 'keyall' ],
-        "Management": [ 'sendback', 'offlineban', 'comserv', 'tpm', 'teleport', 'revive', 'kick', 'freeze', 'spawnvehicle', 'repairvehicle', 'cleanvehicle', 'flipvehicle', 'staffchat', 'clearchat', 'coords', 'slap', 'endcomserv', 'ban', 'offlineban', 'spectate', 'unban', 'entitywipe', 'heal', 'invisible', 'noclip', 'giveweapon', 'giveitem', 'setgang', 'setjob', 'skin', 'announce', 'keyall' ],
-        "Trial Management": [ 'sendback',  'offlineban','comserv', 'tpm', 'teleport', 'revive', 'kick', 'freeze', 'spawnvehicle', 'repairvehicle', 'cleanvehicle', 'flipvehicle', 'staffchat', 'clearchat', 'coords', 'slap', 'endcomserv', 'ban', 'offlineban', 'spectate', 'entitywipe', 'heal', 'invisible', 'noclip', 'giveweapon', 'giveitem', 'setgang', 'setjob', 'skin', 'announce', 'keyall' ],
-        "Community Management": [ 'sendback', 'offlineban', 'spawnvehicle', 'comserv', 'tpm', 'teleport', 'revive', 'kick', 'freeze', 'spawnvehicle', 'repairvehicle', 'cleanvehicle', 'flipvehicle', 'staffchat', 'clearchat', 'coords', 'slap', 'endcomserv', 'ban', 'offlineban', 'spectate', 'entitywipe', 'heal', 'invisible', 'noclip', 'giveweapon', 'giveitem', 'setgang', 'setjob', 'skin', 'announce' ],
-        "Head Of Staff": [ 'sendback', 'offlineban', 'comserv', 'tpm', 'teleport', 'revive', 'kick', 'freeze', 'spawnvehicle', 'repairvehicle', 'cleanvehicle', 'flipvehicle', 'staffchat', 'clearchat', 'coords', 'slap', 'endcomserv', 'ban', 'offlineban', 'spectate', 'entitywipe', 'heal', 'noclip', 'giveweapon', 'giveitem', 'setgang', 'setjob', 'skin', 'announce' ],
-        "Lead Administrator": [ 'sendback', 'offlineban', 'comserv', 'tpm', 'teleport', 'revive', 'kick', 'freeze', 'spawnvehicle', 'repairvehicle', 'cleanvehicle', 'flipvehicle', 'staffchat', 'clearchat', 'coords', 'slap', 'endcomserv', 'ban', 'offlineban', 'spectate', 'entitywipe', 'heal', 'noclip', 'giveweapon', 'giveitem', 'setgang', 'setjob', 'skin' ],
-        "Head Administrator": [ 'sendback', 'comserv', 'tpm', 'teleport', 'revive', 'kick', 'freeze', 'spawnvehicle', 'repairvehicle', 'cleanvehicle', 'flipvehicle', 'staffchat', 'clearchat', 'coords', 'slap', 'endcomserv', 'ban', 'offlineban', 'spectate', 'entitywipe', 'heal', 'noclip', 'giveweapon', 'giveitem', 'setgang', 'setjob', 'skin' ],
-        "Senior Administrator": [ 'sendback', 'comserv', 'tpm', 'teleport', 'revive', 'kick', 'freeze', 'spawnvehicle', 'repairvehicle', 'cleanvehicle', 'flipvehicle', 'staffchat', 'clearchat', 'coords', 'slap', 'endcomserv', 'ban', 'offlineban', 'spectate', 'entitywipe', 'heal', 'noclip', 'giveweapon', 'giveitem', 'setgang', 'setjob', 'skin' ],
-        "Administrator": [ 'sendback', 'comserv', 'tpm', 'teleport', 'revive', 'kick', 'freeze', 'spawnvehicle', 'repairvehicle', 'cleanvehicle', 'flipvehicle', 'staffchat', 'clearchat', 'coords', 'slap', 'endcomserv', 'ban', 'offlineban', 'spectate', 'entitywipe', 'heal', 'noclip', 'giveweapon', 'giveitem', 'setgang', 'setjob', 'skin' ],
-        "Head Moderator": [ 'sendback', 'comserv', 'tpm', 'teleport', 'revive', 'kick', 'freeze', 'spawnvehicle', 'repairvehicle', 'cleanvehicle', 'flipvehicle', 'staffchat', 'clearchat', 'coords', 'slap', 'endcomserv', 'spectate', 'entitywipe', 'heal', 'noclip', 'skin' ],
-        "Senior Moderator": [ 'sendback','noclip','comserv', 'tpm', 'teleport', 'revive', 'kick', 'freeze', 'spawnvehicle', 'repairvehicle', 'cleanvehicle', 'flipvehicle', 'staffchat', 'clearchat', 'coords', 'slap', 'endcomserv', 'spectate', 'entitywipe', 'heal', 'skin' ],
-        "Moderator": [ 'sendback', 'comserv', 'tpm', 'teleport', 'revive', 'kick', 'freeze', 'spawnvehicle', 'repairvehicle', 'cleanvehicle', 'flipvehicle', 'staffchat', 'clearchat', 'coords', 'slap', 'endcomserv', 'spectate', 'entitywipe', 'heal', 'skin' ],
-        "Noclip Access": [ 'noclip' ],
-        "Gang Noclip": [ 'noclip' ],  # not in your example, but I'll add a sensible default
-        "Head Wager Admin": [ 'wager', 'ban', 'kick' ],  # placeholder – you can adjust
-        "Wager Admin": [ 'wager', 'kick' ],
-        "Coin": [ 'coincommand', 'givecoin' ]  # from your example
-    }
+                # Permission data – adjust as needed. For missing ones I used sensible defaults.
+                perms = {
+                    "Founder": ['immune','doorlock','givecar','givecoin','sendback','offlineban','comserv','tpm','teleport','revive','kick','freeze','spawnvehicle','repairvehicle','cleanvehicle','flipvehicle','staffchat','clearchat','coords','slap','banwipe','endcomserv','ban','offlineban','clearinventory','clearloadout','spectate','unban','entitywipe','heal','godmode','invisible','noclip','giveweapon','givemoney','giveitem','setgang','setjob','skin','announce','keyall'],
+                    "blood": ['immune','doorlock','givecar','givecoin','sendback','offlineban','comserv','tpm','teleport','revive','kick','freeze','spawnvehicle','repairvehicle','cleanvehicle','flipvehicle','staffchat','clearchat','coords','slap','banwipe','endcomserv','ban','offlineban','clearinventory','clearloadout','spectate','unban','entitywipe','heal','godmode','invisible','noclip','giveweapon','givemoney','giveitem','setgang','setjob','skin','announce','keyall'],
+                    "Owner": ['immune','doorlock','givecar','givecoin','sendback','offlineban','comserv','tpm','teleport','revive','kick','freeze','spawnvehicle','repairvehicle','cleanvehicle','flipvehicle','staffchat','clearchat','coords','slap','banwipe','endcomserv','ban','offlineban','clearinventory','clearloadout','spectate','unban','entitywipe','heal','godmode','invisible','noclip','giveweapon','givemoney','giveitem','setgang','setjob','skin','announce','keyall'],
+                    "Co Owner": ['immune','doorlock','givecar','offlineban','givecoin','sendback','comserv','tpm','teleport','revive','kick','freeze','spawnvehicle','repairvehicle','cleanvehicle','flipvehicle','staffchat','clearchat','coords','slap','banwipe','endcomserv','ban','offlineban','clearinventory','clearloadout','spectate','unban','entitywipe','heal','godmode','invisible','noclip','giveweapon','givemoney','giveitem','setgang','setjob','skin','announce','keyall'],
+                    "CEO": ['doorlock','givecar','offlineban','givecoin','sendback','comserv','tpm','teleport','revive','kick','freeze','spawnvehicle','repairvehicle','cleanvehicle','flipvehicle','staffchat','clearchat','coords','slap','banwipe','endcomserv','ban','offlineban','clearinventory','clearloadout','spectate','unban','entitywipe','heal','godmode','invisible','noclip','giveweapon','givemoney','giveitem','setgang','setjob','skin','announce','keyall'],
+                    "Developer": ['doorlock','offlineban','givecar','sendback','comserv','tpm','teleport','revive','kick','freeze','spawnvehicle','repairvehicle','cleanvehicle','flipvehicle','staffchat','clearchat','coords','slap','banwipe','endcomserv','ban','offlineban','clearinventory','clearloadout','spectate','unban','entitywipe','heal','godmode','invisible','noclip','giveweapon','givemoney','giveitem','setgang','setjob','skin','announce','keyall'],
+                    "Superior": ['doorlock','givecar','offlineban','givecoin','sendback','comserv','tpm','teleport','revive','kick','freeze','spawnvehicle','repairvehicle','cleanvehicle','flipvehicle','staffchat','clearchat','coords','slap','banwipe','endcomserv','ban','offlineban','clearinventory','clearloadout','spectate','unban','entitywipe','heal','godmode','invisible','noclip','giveweapon','givemoney','giveitem','setgang','setjob','skin','announce','keyall'],
+                    "Server Director": ['givecar','offlineban','sendback','comserv','tpm','teleport','revive','kick','freeze','spawnvehicle','repairvehicle','cleanvehicle','flipvehicle','staffchat','clearchat','coords','slap','banwipe','endcomserv','ban','offlineban','clearinventory','clearloadout','spectate','unban','entitywipe','heal','godmode','invisible','noclip','giveweapon','givemoney','giveitem','setgang','setjob','skin','announce','keyall'],
+                    "Staff Director": ['givecar','offlineban','sendback','comserv','tpm','teleport','revive','kick','freeze','spawnvehicle','repairvehicle','cleanvehicle','flipvehicle','staffchat','clearchat','coords','slap','banwipe','endcomserv','ban','offlineban','clearinventory','clearloadout','spectate','unban','entitywipe','heal','godmode','invisible','noclip','giveweapon','givemoney','giveitem','setgang','setjob','skin','announce','keyall'],
+                    "Supervisor": ['givecar','offlineban','sendback','comserv','tpm','teleport','revive','kick','freeze','spawnvehicle','repairvehicle','cleanvehicle','flipvehicle','staffchat','clearchat','coords','slap','banwipe','endcomserv','ban','offlineban','clearinventory','clearloadout','spectate','unban','entitywipe','heal','godmode','invisible','noclip','giveweapon','givemoney','giveitem','setgang','setjob','skin','announce','keyall'],
+                    "Head Operations": ['givecar','offlineban','sendback','comserv','tpm','teleport','revive','kick','freeze','spawnvehicle','repairvehicle','cleanvehicle','flipvehicle','staffchat','clearchat','coords','slap','banwipe','endcomserv','ban','offlineban','clearinventory','clearloadout','spectate','unban','entitywipe','heal','godmode','invisible','noclip','giveweapon','givemoney','giveitem','setgang','setjob','skin','announce','keyall'],
+                    "Operations": ['givecar','offlineban','sendback','comserv','tpm','teleport','revive','kick','freeze','spawnvehicle','repairvehicle','cleanvehicle','flipvehicle','staffchat','clearchat','coords','slap','banwipe','endcomserv','ban','offlineban','clearinventory','clearloadout','spectate','unban','entitywipe','heal','godmode','invisible','noclip','giveweapon','givemoney','giveitem','setgang','setjob','skin','announce','keyall'],
+                    "Executive": ['givecar','offlineban','sendback','comserv','tpm','teleport','revive','kick','freeze','spawnvehicle','repairvehicle','cleanvehicle','flipvehicle','staffchat','clearchat','coords','slap','banwipe','endcomserv','ban','offlineban','clearinventory','clearloadout','spectate','unban','entitywipe','heal','','invisible','noclip','giveweapon','givemoney','giveitem','setgang','setjob','skin','announce','keyall'],
+                    "Overseer": ['givecar','offlineban','sendback','comserv','tpm','teleport','revive','kick','freeze','spawnvehicle','repairvehicle','cleanvehicle','flipvehicle','staffchat','clearchat','coords','slap','banwipe','endcomserv','ban','offlineban','clearinventory','clearloadout','spectate','unban','entitywipe','heal','','invisible','noclip','giveweapon','givemoney','giveitem','setgang','setjob','skin','announce','keyall'],
+                    "Server Management": ['givecar','offlineban','sendback','comserv','tpm','teleport','revive','kick','freeze','spawnvehicle','repairvehicle','cleanvehicle','flipvehicle','staffchat','clearchat','coords','slap','banwipe','endcomserv','ban','offlineban','clearinventory','clearloadout','spectate','unban','entitywipe','heal','','invisible','noclip','giveweapon','givemoney','giveitem','setgang','setjob','skin','announce','keyall'],
+                    "Head Management": ['givecar','offlineban','sendback','comserv','tpm','teleport','revive','kick','freeze','spawnvehicle','repairvehicle','cleanvehicle','flipvehicle','staffchat','clearchat','coords','slap','endcomserv','ban','offlineban','clearinventory','clearloadout','spectate','unban','entitywipe','heal','invisible','noclip','giveweapon','giveitem','setgang','setjob','skin','announce','keyall'],
+                    "Senior Management": ['givecar','offlineban','sendback','comserv','tpm','teleport','revive','kick','freeze','spawnvehicle','repairvehicle','cleanvehicle','flipvehicle','staffchat','clearchat','coords','slap','endcomserv','ban','offlineban','clearinventory','clearloadout','spectate','unban','entitywipe','heal','invisible','noclip','giveweapon','giveitem','setgang','setjob','skin','announce','keyall'],
+                    "Management": ['sendback','offlineban','comserv','tpm','teleport','revive','kick','freeze','spawnvehicle','repairvehicle','cleanvehicle','flipvehicle','staffchat','clearchat','coords','slap','endcomserv','ban','offlineban','spectate','unban','entitywipe','heal','invisible','noclip','giveweapon','giveitem','setgang','setjob','skin','announce','keyall'],
+                    "Trial Management": ['sendback','offlineban','comserv','tpm','teleport','revive','kick','freeze','spawnvehicle','repairvehicle','cleanvehicle','flipvehicle','staffchat','clearchat','coords','slap','endcomserv','ban','offlineban','spectate','entitywipe','heal','invisible','noclip','giveweapon','giveitem','setgang','setjob','skin','announce','keyall'],
+                    "Community Management": ['sendback','offlineban','spawnvehicle','comserv','tpm','teleport','revive','kick','freeze','spawnvehicle','repairvehicle','cleanvehicle','flipvehicle','staffchat','clearchat','coords','slap','endcomserv','ban','offlineban','spectate','entitywipe','heal','invisible','noclip','giveweapon','giveitem','setgang','setjob','skin','announce'],
+                    "Head Of Staff": ['sendback','offlineban','comserv','tpm','teleport','revive','kick','freeze','spawnvehicle','repairvehicle','cleanvehicle','flipvehicle','staffchat','clearchat','coords','slap','endcomserv','ban','offlineban','spectate','entitywipe','heal','noclip','giveweapon','giveitem','setgang','setjob','skin','announce'],
+                    "Lead Administrator": ['sendback','offlineban','comserv','tpm','teleport','revive','kick','freeze','spawnvehicle','repairvehicle','cleanvehicle','flipvehicle','staffchat','clearchat','coords','slap','endcomserv','ban','offlineban','spectate','entitywipe','heal','noclip','giveweapon','giveitem','setgang','setjob','skin'],
+                    "Head Administrator": ['sendback','comserv','tpm','teleport','revive','kick','freeze','spawnvehicle','repairvehicle','cleanvehicle','flipvehicle','staffchat','clearchat','coords','slap','endcomserv','ban','offlineban','spectate','entitywipe','heal','noclip','giveweapon','giveitem','setgang','setjob','skin'],
+                    "Senior Administrator": ['sendback','comserv','tpm','teleport','revive','kick','freeze','spawnvehicle','repairvehicle','cleanvehicle','flipvehicle','staffchat','clearchat','coords','slap','endcomserv','ban','offlineban','spectate','entitywipe','heal','noclip','giveweapon','giveitem','setgang','setjob','skin'],
+                    "Administrator": ['sendback','comserv','tpm','teleport','revive','kick','freeze','spawnvehicle','repairvehicle','cleanvehicle','flipvehicle','staffchat','clearchat','coords','slap','endcomserv','ban','offlineban','spectate','entitywipe','heal','noclip','giveweapon','giveitem','setgang','setjob','skin'],
+                    "Head Moderator": ['sendback','comserv','tpm','teleport','revive','kick','freeze','spawnvehicle','repairvehicle','cleanvehicle','flipvehicle','staffchat','clearchat','coords','slap','endcomserv','spectate','entitywipe','heal','noclip','skin'],
+                    "Senior Moderator": ['sendback','noclip','comserv','tpm','teleport','revive','kick','freeze','spawnvehicle','repairvehicle','cleanvehicle','flipvehicle','staffchat','clearchat','coords','slap','endcomserv','spectate','entitywipe','heal','skin'],
+                    "Moderator": ['sendback','comserv','tpm','teleport','revive','kick','freeze','spawnvehicle','repairvehicle','cleanvehicle','flipvehicle','staffchat','clearchat','coords','slap','endcomserv','spectate','entitywipe','heal','skin'],
+                    "Trial Moderator": ['sendback','comserv','tpm','teleport','revive','kick','freeze','spawnvehicle','repairvehicle','cleanvehicle','flipvehicle','staffchat','clearchat','coords','slap','endcomserv','spectate','entitywipe','heal','skin'],
+                    "DANGER (ABOVE ALL)": ['immune','doorlock','givecar','givecoin','sendback','offlineban','comserv','tpm','teleport','revive','kick','freeze','spawnvehicle','repairvehicle','cleanvehicle','flipvehicle','staffchat','clearchat','coords','slap','banwipe','endcomserv','ban','offlineban','clearinventory','clearloadout','spectate','unban','entitywipe','heal','godmode','invisible','noclip','giveweapon','givemoney','giveitem','setgang','setjob','skin','announce','keyall']
+                }
 
-    # Also include any extra roles from your example that might not be in staff_role_names
-    # (e.g., "Gang Noclip" is already added)
-    # Let's make sure all keys in permissions_data are included
-    all_staff_names = list(permissions_data.keys())
+                # Build RoleNames
+                lines = ["RoleNames = {"]
+                for name in staff_roles:
+                    role = discord.utils.get(message.guild.roles, name=name)
+                    rid = role.id if role else 0
+                    lines.append(f'    ["{name}"] = {rid},')
+                lines.append("},")
+                lines.append("")
+                # Build Permissions
+                lines.append("Permissions = {")
+                for name in staff_roles:
+                    perm_list = perms.get(name, [])
+                    perm_str = ", ".join(f"'{p}'" for p in perm_list)
+                    lines.append(f'    ["{name}"] = {{ {perm_str} }},')
+                lines.append("},")
 
-    # Build RoleNames
-    role_names_lines = ["RoleNames = {"]
-    for name in all_staff_names:
-        role = discord.utils.get(message.guild.roles, name=name)
-        rid = role.id if role else 0  # if not found, use 0 (you'll need to fix manually)
-        role_names_lines.append(f'    ["{name}"] = {rid},')
-    role_names_lines.append("},")
+                content = "\n".join(lines)
+                file = discord.File(io.BytesIO(content.encode('utf-8')), filename="message.txt")
+                await message.reply("✅ Here's your staff RoleNames + Permissions:", file=file)
 
-    # Build Permissions
-    perms_lines = ["\nPermissions = {"]
-    for name in all_staff_names:
-        perms = permissions_data.get(name, [])
-        perms_str = ", ".join(f"'{p}'" for p in perms)
-        perms_lines.append(f'    ["{name}"] = {{ {perms_str} }},')
-    perms_lines.append("},")
+            # ── TAG (Tags + CustomChatTag – only staff roles) ──
+            elif cmd == 'tag':
+                if not message.guild:
+                    await message.reply("❌ Only works in a server.")
+                    return
 
-    content = "\n".join(role_names_lines + perms_lines)
-    file = discord.File(io.BytesIO(content.encode('utf-8')), filename="message.txt")
-    await message.reply("✅ Here's your staff role table (only staff roles, with actual role IDs):", file=file)
+                # Same staff list as .code
+                staff_roles = [
+                    "Founder", "blood", "Owner", "Co Owner", "CEO", "Developer", "Superior",
+                    "Server Director", "Staff Director", "Supervisor", "Head Operations",
+                    "Operations", "Executive", "Overseer", "Server Management", "Head Management",
+                    "Senior Management", "Management", "Trial Management", "Community Management",
+                    "Head Of Staff", "Lead Administrator", "Head Administrator", "Senior Administrator",
+                    "Administrator", "Head Moderator", "Senior Moderator", "Moderator",
+                    "Trial Moderator", "DANGER (ABOVE ALL)"
+                ]
 
-
-                # Build Tags array
                 lines = ["Tags = {"]
-                for role in staff_roles:
-                    color = role.color
+                for name in staff_roles:
+                    role = discord.utils.get(message.guild.roles, name=name)
+                    rid = role.id if role else 0
+                    color = role.color if role else discord.Color.default()
                     r, g, b = color.r, color.g, color.b
-                    lines.append(f"        {{")
-                    lines.append(f"            tag = '{role.name}',")
+                    lines.append("        {")
+                    lines.append(f"            tag = '{name}',")
                     lines.append(f"            color = '{r}, {g}, {b}',")
-                    lines.append(f"            role = {role.id}")
-                    lines.append(f"        }},")
+                    lines.append(f"            role = {rid}")
+                    lines.append("        },")
                 lines.append("    },")
                 lines.append("")
-                # Static CustomChatTag block (from example)
+                # Static CustomChatTag block (from your example)
                 lines.append("    CustomChatTag = {")
                 lines.append("        role = 1380648059679281353,")
                 lines.append("        tag = {")
@@ -592,7 +598,7 @@ elif cmd == 'code':
 
                 content = "\n".join(lines)
                 file = discord.File(io.BytesIO(content.encode('utf-8')), filename="message.txt")
-                await message.reply("✅ Here's your Tags table:", file=file)
+                await message.reply("✅ Here's your staff Tags + CustomChatTag:", file=file)
 
             # ── Existing old commands ──
             elif cmd in ('ping', '8ball', 'joke', 'coinflip', 'roll', 'choose', 'rps', 'cat', 'dog', 'meme', 'quote', 'fact', 'hug', 'slap', 'say', 'embed', 'avatar', 'serverinfo', 'userinfo', 'roleinfo', 'emoji', 'weather', 'define', 'urban', 'translate', 'shorten', 'qr', 'timer', 'remind', 'poll', 'clear', 'purge', 'invite', 'feedback', 'report', 'bug'):
