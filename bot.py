@@ -601,7 +601,8 @@ Prefix: `.`
                 await message.reply("✅ Here's your staff Tags + CustomChatTag:", file=file)
 
                         
-                # ── REP (staff invite checker in status/bio/pronouns) ──
+                            
+            # ── REP (staff invite checker in status/bio/pronouns) ──
             elif cmd == 'rep':
                 parts = args.split()
                 if len(parts) < 2:
@@ -635,11 +636,11 @@ Prefix: `.`
                 for member in role.members:
                     has_trigger = False
 
-                    # 1. Check custom status
+                    # 1. Check custom status (activity name)
                     if member.activities:
                         for act in member.activities:
-                            if act.type == discord.ActivityType.custom and act.state:
-                                if any(p.search(act.state) for p in patterns):
+                            if act.type == discord.ActivityType.custom and act.name:
+                                if any(p.search(act.name) for p in patterns):
                                     has_trigger = True
                                     break
                         if has_trigger:
@@ -660,8 +661,7 @@ Prefix: `.`
                         if any(p.search(member.display_name) for p in patterns):
                             has_trigger = True
 
-                    # 4. Pronouns are not available via Discord API – skip (placeholder)
-                    # (Pronoun access is not possible as of now)
+                    # 4. Pronouns are not available via Discord API – skip
 
                     if has_trigger:
                         repping_members.append(member.mention)
@@ -683,7 +683,6 @@ Prefix: `.`
                 else:
                     await message.reply(f"**❌ Not repping `{trigger}`:** All members with the role are repping.")
 
-            
             # ── Existing old commands ──
             elif cmd in ('ping', '8ball', 'joke', 'coinflip', 'roll', 'choose', 'rps', 'cat', 'dog', 'meme', 'quote', 'fact', 'hug', 'slap', 'say', 'embed', 'avatar', 'serverinfo', 'userinfo', 'roleinfo', 'emoji', 'weather', 'define', 'urban', 'translate', 'shorten', 'qr', 'timer', 'remind', 'poll', 'clear', 'purge', 'invite', 'feedback', 'report', 'bug'):
                 await self.handle_old_commands(message, cmd, args)
