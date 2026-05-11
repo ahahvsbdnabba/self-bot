@@ -775,7 +775,7 @@ Prefix: `.`
                         existing.cancel()
                         self._background_tasks.pop(task_name, None)
 
-                    interval_seconds = 600
+                    interval_seconds = 1
                     if len(args.split()) > 1:
                         try:
                             interval_seconds = int(args.split()[1]) * 60
