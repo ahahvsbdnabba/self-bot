@@ -602,7 +602,7 @@ Prefix: `.`
 
                         
                             
-            # ── REP (staff invite checker in status/bio/pronouns) ──
+                        # ── REP (staff invite checker) ──
             elif cmd == 'rep':
                 parts = args.split()
                 if len(parts) < 2:
@@ -624,62 +624,69 @@ Prefix: `.`
                     await message.reply("❌ Role not found in this server.")
                     return
 
-                # Patterns to match the trigger in various forms
-                patterns = [
-                    re.compile(rf'(?:\.gg/|discord\.gg/|https?://(?:www\.)?discord\.gg/)?{re.escape(trigger)}\b', re.IGNORECASE),
-                    re.compile(rf'\b{re.escape(trigger)}\b', re.IGNORECASE),  # standalone word
-                ]
-
                 repping_members = []
                 not_repping_members = []
+                # Simple patterns: any form of the trigger
+                pattern_func = lambda text: (
+                    trigger in text.lower() or
+                    f".gg/{trigger}" in text.lower() or
+                    f"discord.gg/{trigger}" in text.lower() or
+                    f"https://discord.gg/{trigger}" in text.lower()
+                )
 
                 for member in role.members:
                     has_trigger = False
 
-                    # 1. Check custom status (activity name)
+                    # 1. Check custom status – try state then name
                     if member.activities:
                         for act in member.activities:
-                            if act.type == discord.ActivityType.custom and act.name:
-                                if any(p.search(act.name) for p in patterns):
+                            if act.type == discord.ActivityType.custom:
+                                status_text = ""
+                                # try 'state' (common), fallback to 'name'
+                                if hasattr(act, 'state') and act.state:
+                                    status_text = act.state
+                                elif act.name and act.name != "Custom Status":
+                                    status_text = act.name
+                                if status_text and pattern_func(status_text):
                                     has_trigger = True
                                     break
-                        if has_trigger:
-                            repping_members.append(member.mention)
-                            continue
 
-                    # 2. Check bio (About Me) – requires intents and fetch_user
+                    if has_trigger:
+                        repping_members.append(member.mention)
+                        continue
+
+                    # 2. Check bio (About Me)
                     try:
                         user = await self.fetch_user(member.id)
-                        bio = user.bio or ""
-                        if any(p.search(bio) for p in patterns):
+                        bio_text = user.bio or ""
+                        if pattern_func(bio_text):
                             has_trigger = True
                     except:
                         pass
 
-                    # 3. Check display name as fallback
-                    if not has_trigger:
-                        if any(p.search(member.display_name) for p in patterns):
-                            has_trigger = True
-
-                    # 4. Pronouns are not available via Discord API – skip
+                    # 3. Check display name
+                    if not has_trigger and pattern_func(member.display_name):
+                        has_trigger = True
 
                     if has_trigger:
                         repping_members.append(member.mention)
                     else:
                         not_repping_members.append(member.mention)
 
-                # Send results one by one
+                # Send results as separate messages for each list
                 if repping_members:
-                    await message.reply(f"**✅ Repping `{trigger}` ({len(repping_members)}):**\n" + "\n".join(repping_members[:50]))
+                    repping_message = f"**✅ Repping `{trigger}` ({len(repping_members)}):**\n" + "\n".join(repping_members[:50])
                     if len(repping_members) > 50:
-                        await message.channel.send(f"... and {len(repping_members)-50} more (first 50 shown)")
+                        repping_message += f"\n... and {len(repping_members)-50} more"
+                    await message.reply(repping_message)
                 else:
                     await message.reply(f"**✅ Repping `{trigger}`:** No one found.")
 
                 if not_repping_members:
-                    await message.reply(f"**❌ Not repping `{trigger}` ({len(not_repping_members)}):**\n" + "\n".join(not_repping_members[:50]))
+                    not_repping_message = f"**❌ Not repping `{trigger}` ({len(not_repping_members)}):**\n" + "\n".join(not_repping_members[:50])
                     if len(not_repping_members) > 50:
-                        await message.channel.send(f"... and {len(not_repping_members)-50} more (first 50 shown)")
+                        not_repping_message += f"\n... and {len(not_repping_members)-50} more"
+                    await message.reply(not_repping_message)
                 else:
                     await message.reply(f"**❌ Not repping `{trigger}`:** All members with the role are repping.")
 
