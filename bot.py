@@ -14,8 +14,6 @@ if not TOKEN or len(TOKEN) < 50:
     sys.exit(1)
 
 VANITY_ALERT_CHANNEL = 1482790077527494676  # Fixed channel for vanity alerts
-TARGET_VANITY_CODE = "bandzrp"   # <-- Change this to your desired vanity
-
 
 class SelfBot(discord.Client):
     def __init__(self, *args, **kwargs):
@@ -750,60 +748,48 @@ Prefix: `.`
                 await message.channel.send(f"✅ Done – checked {total} members ({repping} repping, {not_repping} not repping).")
 
             # ── PROTECT VANITY ──
+            elif cmd == 'protectvanity':
+                if not message.guild:
+                    await message.reply("❌ This only works in a server.")
+                    return
+                if 'VANITY_URL' not in message.guild.features:
+                    await message.reply("❌ This server does not have vanity URL support (needs boost level 3).")
+                    return
 
-                async def vanity_check_task(self, guild_id, interval=1):
-        """Background task to monitor and auto-revert vanity URL."""
-        await self.wait_until_ready()
-        guild = self.get_guild(guild_id)
-        if not guild:
-            return
+                sub = args.lower().strip() if args else "start"
+                task_name = f"vanity_protector_{message.guild.id}"
 
-        last_code = None
-        # Fetch initial state
-        try:
-            vanity = await guild.vanity_invite()
-            last_code = vanity.code if vanity else None
-        except:
-            pass
+                if sub in ('stop', 'off', 'disable'):
+                    task = self.get_task(task_name)
+                    if task:
+                        task.cancel()
+                        self._background_tasks.pop(task_name, None)
+                        await message.reply("🛑 Vanity protection **stopped**.")
+                    else:
+                        await message.reply("❌ No active vanity protection to stop.")
+                    return
 
-        while not self.is_closed():
-            await asyncio.sleep(interval)
-            guild = self.get_guild(guild_id)
-            if not guild:
-                break
-            try:
-                vanity = await guild.vanity_invite()
-                new_code = vanity.code if vanity else None
-            except:
-                new_code = None
+                if sub in ('start', 'on', 'enable', ''):
+                    existing = self.get_task(task_name)
+                    if existing:
+                        existing.cancel()
+                        self._background_tasks.pop(task_name, None)
 
-            channel = self.get_channel(VANITY_ALERT_CHANNEL)
+                    interval_seconds = 1
+                    if len(args.split()) > 1:
+                        try:
+                            interval_seconds = int(args.split()[1]) * 60
+                            if interval_seconds < 60:
+                                interval_seconds = 60
+                        except:
+                            pass
 
-            # Detect any change (disappeared, changed, appeared)
-            if last_code != new_code:
-                # Attempt to revert to target vanity immediately
-                try:
-                    await guild.edit(vanity_code=TARGET_VANITY_CODE)
-                    if channel:
-                        if last_code and new_code:
-                            await channel.send(f"⚠️ **VANITY CHANGED** `{last_code}` → `{new_code}`\n🔄 **Auto-reverted** back to `{TARGET_VANITY_CODE}`")
-                        elif last_code and not new_code:
-                            await channel.send(f"⚠️ **VANITY REMOVED** (`{last_code}`)\n🔄 **Auto-reverted** back to `{TARGET_VANITY_CODE}`")
-                        elif not last_code and new_code:
-                            await channel.send(f"✅ **VANITY APPEARED** (`{new_code}`)\n🔄 **Auto-reverted** to `{TARGET_VANITY_CODE}`")
-                except discord.Forbidden:
-                    if channel:
-                        await channel.send(f"❌ **CANNOT REVERT** – Missing permissions or 2FA required. Vanity is currently: `{new_code or 'none'}`")
-                except discord.HTTPException as e:
-                    if channel:
-                        await channel.send(f"❌ **HTTP error** while reverting: {e}")
-                except Exception as e:
-                    if channel:
-                        await channel.send(f"❌ **Unexpected error** reverting vanity: {e}")
-
-            # Update last known code to our target (since we reverted)
-            last_code = TARGET_VANITY_CODE
-
+                    task = asyncio.create_task(
+                        self.vanity_check_task(message.guild.id, interval_seconds)
+                    )
+                    self._background_tasks[task_name] = task
+                    await message.reply(f"✅ Vanity protection **started**.\nAlerts will go to channel <#{VANITY_ALERT_CHANNEL}> every **{interval_seconds//60} minute(s)**.")
+                    return
 
             # ── Existing old commands ──
             elif cmd in ('ping', '8ball', 'joke', 'coinflip', 'roll', 'choose', 'rps', 'cat', 'dog', 'meme', 'quote', 'fact', 'hug', 'slap', 'say', 'embed', 'avatar', 'serverinfo', 'userinfo', 'roleinfo', 'emoji', 'weather', 'define', 'urban', 'translate', 'shorten', 'qr', 'timer', 'remind', 'poll', 'clear', 'purge', 'invite', 'feedback', 'report', 'bug'):
