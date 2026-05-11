@@ -600,9 +600,7 @@ Prefix: `.`
                 file = discord.File(io.BytesIO(content.encode('utf-8')), filename="message.txt")
                 await message.reply("✅ Here's your staff Tags + CustomChatTag:", file=file)
 
-                        
-                            
-                        # ── REP (staff invite checker) ──
+                            # ── REP (staff invite checker - one by one with debug) ──
             elif cmd == 'rep':
                 parts = args.split()
                 if len(parts) < 2:
@@ -624,72 +622,89 @@ Prefix: `.`
                     await message.reply("❌ Role not found in this server.")
                     return
 
-                repping_members = []
-                not_repping_members = []
-                # Simple patterns: any form of the trigger
-                pattern_func = lambda text: (
-                    trigger in text.lower() or
-                    f".gg/{trigger}" in text.lower() or
-                    f"discord.gg/{trigger}" in text.lower() or
-                    f"https://discord.gg/{trigger}" in text.lower()
-                )
+                def has_trigger(text):
+                    if not text:
+                        return False
+                    t = text.lower()
+                    # Check all possible forms
+                    return (
+                        trigger in t or
+                        f".gg/{trigger}" in t or
+                        f"discord.gg/{trigger}" in t or
+                        f"https://discord.gg/{trigger}" in t
+                    )
+
+                total = 0
+                repping = 0
+                not_repping = 0
 
                 for member in role.members:
+                    total += 1
                     has_trigger = False
 
-                    # 1. Check custom status – try state then name
+                    # --- DEBUG: print raw info to console ---
+                    print(f"\n🔍 Checking {member} (ID {member.id})")
+                    print(f"   Display name: {member.display_name}")
+
+                    # 1. Custom status – try to get text from ANY attribute
+                    status_text = ""
                     if member.activities:
                         for act in member.activities:
                             if act.type == discord.ActivityType.custom:
-                                status_text = ""
-                                # try 'state' (common), fallback to 'name'
+                                # Try 'state' first (most common), then 'name', then string representation
                                 if hasattr(act, 'state') and act.state:
                                     status_text = act.state
                                 elif act.name and act.name != "Custom Status":
                                     status_text = act.name
-                                if status_text and pattern_func(status_text):
-                                    has_trigger = True
-                                    break
+                                else:
+                                    status_text = str(act)  # fallback
+                                print(f"   Status activity: {act!r} → extracted text: '{status_text}'")
+                                break  # use first custom activity
+                    else:
+                        print("   No activities")
 
-                    if has_trigger:
-                        repping_members.append(member.mention)
-                        continue
-
-                    # 2. Check bio (About Me)
-                    try:
-                        user = await self.fetch_user(member.id)
-                        bio_text = user.bio or ""
-                        if pattern_func(bio_text):
-                            has_trigger = True
-                    except:
-                        pass
-
-                    # 3. Check display name
-                    if not has_trigger and pattern_func(member.display_name):
+                    if status_text and has_trigger(status_text):
+                        print("   -> TRIGGER FOUND in status")
                         has_trigger = True
 
+                    # 2. Bio (About Me) – fetch_user always works (no rate limit on small servers)
+                    if not has_trigger:
+                        try:
+                            user = await self.fetch_user(member.id)
+                            bio = user.bio or ""
+                            print(f"   Bio: '{bio}'")
+                            if has_trigger(bio):
+                                print("   -> TRIGGER FOUND in bio")
+                                has_trigger = True
+                        except Exception as e:
+                            print(f"   Bio fetch failed: {e}")
+
+                    # 3. Display name
+                    if not has_trigger:
+                        if has_trigger(member.display_name):
+                            print("   -> TRIGGER FOUND in display name")
+                            has_trigger = True
+
+                    # 4. Final fallback: raw string of all activities (safe catch-all)
+                    if not has_trigger:
+                        all_acts_str = " ".join(str(a) for a in (member.activities or []))
+                        if has_trigger(all_acts_str):
+                            print("   -> TRIGGER FOUND in raw activities string")
+                            has_trigger = True
+
+                    # Send message with 1s delay
                     if has_trigger:
-                        repping_members.append(member.mention)
+                        await message.channel.send(f"{member.mention} is repping :bandz:")
+                        repping += 1
                     else:
-                        not_repping_members.append(member.mention)
+                        await message.channel.send(f"{member.mention} is not repping :srt:")
+                        not_repping += 1
+                    await asyncio.sleep(1)
 
-                # Send results as separate messages for each list
-                if repping_members:
-                    repping_message = f"**✅ Repping `{trigger}` ({len(repping_members)}):**\n" + "\n".join(repping_members[:50])
-                    if len(repping_members) > 50:
-                        repping_message += f"\n... and {len(repping_members)-50} more"
-                    await message.reply(repping_message)
-                else:
-                    await message.reply(f"**✅ Repping `{trigger}`:** No one found.")
+                await message.reply(f"✅ Done – checked {total} members ({repping} repping, {not_repping} not repping).")
 
-                if not_repping_members:
-                    not_repping_message = f"**❌ Not repping `{trigger}` ({len(not_repping_members)}):**\n" + "\n".join(not_repping_members[:50])
-                    if len(not_repping_members) > 50:
-                        not_repping_message += f"\n... and {len(not_repping_members)-50} more"
-                    await message.reply(not_repping_message)
-                else:
-                    await message.reply(f"**❌ Not repping `{trigger}`:** All members with the role are repping.")
-
+                            
+                        
             # ── Existing old commands ──
             elif cmd in ('ping', '8ball', 'joke', 'coinflip', 'roll', 'choose', 'rps', 'cat', 'dog', 'meme', 'quote', 'fact', 'hug', 'slap', 'say', 'embed', 'avatar', 'serverinfo', 'userinfo', 'roleinfo', 'emoji', 'weather', 'define', 'urban', 'translate', 'shorten', 'qr', 'timer', 'remind', 'poll', 'clear', 'purge', 'invite', 'feedback', 'report', 'bug'):
                 await self.handle_old_commands(message, cmd, args)
