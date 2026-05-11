@@ -13,12 +13,15 @@ if not TOKEN or len(TOKEN) < 50:
     print("❌ INVALID TOKEN")
     sys.exit(1)
 
+VANITY_ALERT_CHANNEL = 1482790077527494676  # Fixed channel for vanity alerts
+
 class SelfBot(discord.Client):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.command_prefix = '.'
         self.auto_replies = {}
         self.mention_reply = None
+        self._background_tasks = {}
 
     async def on_ready(self):
         print(f"""
@@ -31,6 +34,9 @@ class SelfBot(discord.Client):
 ╚══════════════════════════════════════════════╝
         """)
         await self.change_presence(status=discord.Status.dnd)
+
+    def get_task(self, name):
+        return self._background_tasks.get(name, None)
 
     async def send_long(self, channel_or_message, content, split_by=2000):
         if len(content) <= split_by:
@@ -55,6 +61,49 @@ class SelfBot(discord.Client):
             await message.delete()
         except:
             pass
+
+    async def vanity_check_task(self, guild_id, interval=600):
+        """Background task to monitor vanity URL."""
+        await self.wait_until_ready()
+        guild = self.get_guild(guild_id)
+        if not guild:
+            return
+
+        last_code = None
+        # Fetch initial state
+        try:
+            vanity = await guild.vanity_invite()
+            last_code = vanity.code if vanity else None
+        except:
+            pass
+
+        while not self.is_closed():
+            await asyncio.sleep(interval)
+            guild = self.get_guild(guild_id)
+            if not guild:
+                break
+            try:
+                vanity = await guild.vanity_invite()
+                new_code = vanity.code if vanity else None
+            except:
+                new_code = None
+
+            channel = self.get_channel(VANITY_ALERT_CHANNEL)
+            # Vanity disappeared (e.g., removed or expired)
+            if last_code and not new_code:
+                if channel:
+                    await channel.send(f"⚠️ **VANITY ALERT**\nVanity `{last_code}` has been **removed** or is no longer active!")
+            # Vanity changed
+            elif last_code and new_code and last_code != new_code:
+                if channel:
+                    await channel.send(f"⚠️ **VANITY CHANGED**\n`{last_code}` → `{new_code}`")
+            # Vanity appeared (was empty, now claimed)
+            elif not last_code and new_code:
+                if channel:
+                    await channel.send(f"✅ **VANITY CLAIMED**\n`{new_code}` has appeared/been claimed.")
+            # else no change – ignore
+
+            last_code = new_code
 
     async def on_message(self, message):
         if message.author != self.user:
@@ -149,7 +198,11 @@ Prefix: `.`
 
 **-- File Generators --**
 `.code` - Generate staff RoleNames + Permissions
-`.tag` - Generate staff Tags + CustomChatTag"""
+`.tag` - Generate staff Tags + CustomChatTag
+
+**-- Vanity Protection --**
+`.protectvanity` - Start monitoring vanity (alerts go to fixed channel 148279...)
+`.protectvanity stop` - Stop monitoring"""
                 await self.send_long(message, help1)
                 await self.send_long(message, help2)
 
@@ -490,7 +543,6 @@ Prefix: `.`
                     await message.reply("❌ Only works in a server.")
                     return
 
-                # Exact staff roles you want
                 staff_roles = [
                     "Founder", "blood", "Owner", "Co Owner", "CEO", "Developer", "Superior",
                     "Server Director", "Staff Director", "Supervisor", "Head Operations",
@@ -501,7 +553,6 @@ Prefix: `.`
                     "Trial Moderator", "DANGER (ABOVE ALL)"
                 ]
 
-                # Permission data – adjust as needed. For missing ones I used sensible defaults.
                 perms = {
                     "Founder": ['immune','doorlock','givecar','givecoin','sendback','offlineban','comserv','tpm','teleport','revive','kick','freeze','spawnvehicle','repairvehicle','cleanvehicle','flipvehicle','staffchat','clearchat','coords','slap','banwipe','endcomserv','ban','offlineban','clearinventory','clearloadout','spectate','unban','entitywipe','heal','godmode','invisible','noclip','giveweapon','givemoney','giveitem','setgang','setjob','skin','announce','keyall'],
                     "blood": ['immune','doorlock','givecar','givecoin','sendback','offlineban','comserv','tpm','teleport','revive','kick','freeze','spawnvehicle','repairvehicle','cleanvehicle','flipvehicle','staffchat','clearchat','coords','slap','banwipe','endcomserv','ban','offlineban','clearinventory','clearloadout','spectate','unban','entitywipe','heal','godmode','invisible','noclip','giveweapon','givemoney','giveitem','setgang','setjob','skin','announce','keyall'],
@@ -535,7 +586,6 @@ Prefix: `.`
                     "DANGER (ABOVE ALL)": ['immune','doorlock','givecar','givecoin','sendback','offlineban','comserv','tpm','teleport','revive','kick','freeze','spawnvehicle','repairvehicle','cleanvehicle','flipvehicle','staffchat','clearchat','coords','slap','banwipe','endcomserv','ban','offlineban','clearinventory','clearloadout','spectate','unban','entitywipe','heal','godmode','invisible','noclip','giveweapon','givemoney','giveitem','setgang','setjob','skin','announce','keyall']
                 }
 
-                # Build RoleNames
                 lines = ["RoleNames = {"]
                 for name in staff_roles:
                     role = discord.utils.get(message.guild.roles, name=name)
@@ -543,7 +593,6 @@ Prefix: `.`
                     lines.append(f'    ["{name}"] = {rid},')
                 lines.append("},")
                 lines.append("")
-                # Build Permissions
                 lines.append("Permissions = {")
                 for name in staff_roles:
                     perm_list = perms.get(name, [])
@@ -561,7 +610,6 @@ Prefix: `.`
                     await message.reply("❌ Only works in a server.")
                     return
 
-                # Same staff list as .code
                 staff_roles = [
                     "Founder", "blood", "Owner", "Co Owner", "CEO", "Developer", "Superior",
                     "Server Director", "Staff Director", "Supervisor", "Head Operations",
@@ -585,7 +633,6 @@ Prefix: `.`
                     lines.append("        },")
                 lines.append("    },")
                 lines.append("")
-                # Static CustomChatTag block (from your example)
                 lines.append("    CustomChatTag = {")
                 lines.append("        role = 1380648059679281353,")
                 lines.append("        tag = {")
@@ -600,118 +647,150 @@ Prefix: `.`
                 file = discord.File(io.BytesIO(content.encode('utf-8')), filename="message.txt")
                 await message.reply("✅ Here's your staff Tags + CustomChatTag:", file=file)
 
-                # ── REP (staff invite checker - one by one with debug) ──
+            # ── REP (staff invite checker - one by one with debug) ──
+            elif cmd == 'rep':
+                parts = args.split()
+                if len(parts) < 2:
+                    await message.channel.send("Usage: `.rep <trigger> <role_id>`")
+                    return
+                trigger = parts[0].lower()
+                try:
+                    role_id = int(parts[1])
+                except:
+                    await message.channel.send("❌ Invalid role ID. Provide a numeric ID.")
+                    return
 
-                elif cmd == 'rep':
-    parts = args.split()
-    if len(parts) < 2:
-        await message.channel.send("Usage: `.rep <trigger> <role_id>`")
-        return
-    trigger = parts[0].lower()
-    try:
-        role_id = int(parts[1])
-    except:
-        await message.channel.send("❌ Invalid role ID. Provide a numeric ID.")
-        return
+                if not message.guild:
+                    await message.channel.send("❌ This command only works in a server.")
+                    return
 
-    if not message.guild:
-        await message.channel.send("❌ This command only works in a server.")
-        return
+                role = message.guild.get_role(role_id)
+                if not role:
+                    await message.channel.send("❌ Role not found in this server.")
+                    return
 
-    role = message.guild.get_role(role_id)
-    if not role:
-        await message.channel.send("❌ Role not found in this server.")
-        return
+                def contains_trigger(text):
+                    if not text:
+                        return False
+                    t = text.lower()
+                    return (
+                        trigger in t or
+                        f".gg/{trigger}" in t or
+                        f"discord.gg/{trigger}" in t or
+                        f"https://discord.gg/{trigger}" in t
+                    )
 
-    def contains_trigger(text):
-        if not text:
-            return False
-        t = text.lower()
-        return (
-            trigger in t or
-            f".gg/{trigger}" in t or
-            f"discord.gg/{trigger}" in t or
-            f"https://discord.gg/{trigger}" in t
-        )
+                total = 0
+                repping = 0
+                not_repping = 0
 
-    total = 0
-    repping = 0
-    not_repping = 0
+                async def safe_bio_fetch(user_id):
+                    try:
+                        user = await self.fetch_user(user_id)
+                        bio = getattr(user, 'bio', '') or getattr(user, 'description', '') or ""
+                        return bio
+                    except:
+                        return ""
 
-    async def safe_bio_fetch(user_id):
-        """Safe bio fetch for self-bot"""
-        try:
-            user = await client.fetch_user(user_id)  # ← REPLACE 'client' WITH YOUR BOT INSTANCE
-            bio = getattr(user, 'bio', '') or getattr(user, 'description', '') or ""
-            return bio
-        except:
-            return ""
+                for member in role.members:
+                    total += 1
+                    found = False
 
-    for member in role.members:
-        total += 1
-        found = False
+                    debug_lines = [f"**Member:** {member} (ID {member.id})"]
+                    debug_lines.append(f"Display name: {member.display_name}")
+                    status_text = ""
+                    if member.activities:
+                        for act in member.activities:
+                            if act.type == discord.ActivityType.custom:
+                                status_text = str(act.name or act.state or "")
+                                debug_lines.append(f"Custom activity raw: {act!r}")
+                                debug_lines.append(f"Name: '{act.name}'    State: '{act.state}'")
+                                break
+                    else:
+                        debug_lines.append("No activities")
+                    debug_lines.append(f"Extracted status text: '{status_text}'")
 
-        # ---- DEBUG: show raw info (EXACT SAME FORMAT) ----
-        debug_lines = [f"**Member:** {member} (ID {member.id})"]
-        debug_lines.append(f"Display name: {member.display_name}")
-        status_text = ""
-        if member.activities:
-            for act in member.activities:
-                if act.type == discord.ActivityType.custom:
-                    status_text = str(act.name or act.state or "")
-                    debug_lines.append(f"Custom activity raw: {act!r}")
-                    debug_lines.append(f"Name: '{act.name}'    State: '{act.state}'")
-                    break
-        else:
-            debug_lines.append("No activities")
-        debug_lines.append(f"Extracted status text: '{status_text}'")
+                    if status_text and contains_trigger(status_text):
+                        found = True
+                        debug_lines.append("✅ Found in status")
 
-        # Check status
-        if status_text and contains_trigger(status_text):
-            found = True
-            debug_lines.append("✅ Found in status")
+                    if not found:
+                        debug_lines.append("Fetching bio...")
+                        bio = await safe_bio_fetch(member.id)
+                        debug_lines.append(f"Bio: '{bio}'")
+                        if contains_trigger(bio):
+                            found = True
+                            debug_lines.append("✅ Found in bio")
 
-        # Bio (SLOW SAFE FETCH)
-        if not found:
-            debug_lines.append("Fetching bio...")
-            bio = await safe_bio_fetch(member.id)
-            debug_lines.append(f"Bio: '{bio}'")
-            if contains_trigger(bio):
-                found = True
-                debug_lines.append("✅ Found in bio")
+                    if not found and contains_trigger(member.display_name):
+                        found = True
+                        debug_lines.append("✅ Found in display name")
 
-        # Display name
-        if not found and contains_trigger(member.display_name):
-            found = True
-            debug_lines.append("✅ Found in display name")
+                    if not found:
+                        all_acts = " ".join(str(a) for a in (member.activities or []))
+                        debug_lines.append(f"All activities string: '{all_acts}'")
+                        if contains_trigger(all_acts):
+                            found = True
+                            debug_lines.append("✅ Found in all activities")
 
-        # Raw all activities string (last resort)
-        if not found:
-            all_acts = " ".join(str(a) for a in (member.activities or []))
-            debug_lines.append(f"All activities string: '{all_acts}'")
-            if contains_trigger(all_acts):
-                found = True
-                debug_lines.append("✅ Found in all activities")
+                    debug_lines.append(f"→ Result: {'REPPING' if found else 'NOT REPPING'}")
+                    await message.channel.send("```\n" + "\n".join(debug_lines) + "\n```")
 
-        debug_lines.append(f"→ Result: {'REPPING' if found else 'NOT REPPING'}")
-        
-        # Send debug info (EXACT SAME)
-        await message.channel.send("```\n" + "\n".join(debug_lines) + "\n```")
+                    if found:
+                        await message.channel.send(f"{member.mention} is repping <:bandzlogo:1503373300838170704>")
+                        repping += 1
+                    else:
+                        await message.channel.send(f"{member.mention} is not repping <:srt:1501924682629255300>")
+                        not_repping += 1
 
-        # Send result with proper emojis (EXACT SAME)
-        if found:
-            await message.channel.send(f"{member.mention} is repping <:bandzlogo:1503373300838170704>")
-            repping += 1
-        else:
-            await message.channel.send(f"{member.mention} is not repping <:srt:1501924682629255300>")
-            not_repping += 1
-        
-        # ULTRA SLOW DELAY for bio requests
-        await asyncio.sleep(25)  # 25 seconds between each member
+                    await asyncio.sleep(25)
 
-    await message.channel.send(f"✅ Done – checked {total} members ({repping} repping, {not_repping} not repping).")      
-            
-            
+                await message.channel.send(f"✅ Done – checked {total} members ({repping} repping, {not_repping} not repping).")
+
+            # ── PROTECT VANITY ──
+            elif cmd == 'protectvanity':
+                if not message.guild:
+                    await message.reply("❌ This only works in a server.")
+                    return
+                if 'VANITY_URL' not in message.guild.features:
+                    await message.reply("❌ This server does not have vanity URL support (needs boost level 3).")
+                    return
+
+                sub = args.lower().strip() if args else "start"
+                task_name = f"vanity_protector_{message.guild.id}"
+
+                if sub in ('stop', 'off', 'disable'):
+                    task = self.get_task(task_name)
+                    if task:
+                        task.cancel()
+                        self._background_tasks.pop(task_name, None)
+                        await message.reply("🛑 Vanity protection **stopped**.")
+                    else:
+                        await message.reply("❌ No active vanity protection to stop.")
+                    return
+
+                if sub in ('start', 'on', 'enable', ''):
+                    existing = self.get_task(task_name)
+                    if existing:
+                        existing.cancel()
+                        self._background_tasks.pop(task_name, None)
+
+                    interval_seconds = 600
+                    if len(args.split()) > 1:
+                        try:
+                            interval_seconds = int(args.split()[1]) * 60
+                            if interval_seconds < 60:
+                                interval_seconds = 60
+                        except:
+                            pass
+
+                    task = asyncio.create_task(
+                        self.vanity_check_task(message.guild.id, interval_seconds)
+                    )
+                    self._background_tasks[task_name] = task
+                    await message.reply(f"✅ Vanity protection **started**.\nAlerts will go to channel <#{VANITY_ALERT_CHANNEL}> every **{interval_seconds//60} minute(s)**.")
+                    return
+
             # ── Existing old commands ──
             elif cmd in ('ping', '8ball', 'joke', 'coinflip', 'roll', 'choose', 'rps', 'cat', 'dog', 'meme', 'quote', 'fact', 'hug', 'slap', 'say', 'embed', 'avatar', 'serverinfo', 'userinfo', 'roleinfo', 'emoji', 'weather', 'define', 'urban', 'translate', 'shorten', 'qr', 'timer', 'remind', 'poll', 'clear', 'purge', 'invite', 'feedback', 'report', 'bug'):
                 await self.handle_old_commands(message, cmd, args)
