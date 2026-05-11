@@ -600,6 +600,90 @@ Prefix: `.`
                 file = discord.File(io.BytesIO(content.encode('utf-8')), filename="message.txt")
                 await message.reply("✅ Here's your staff Tags + CustomChatTag:", file=file)
 
+                        
+                # ── REP (staff invite checker in status/bio/pronouns) ──
+            elif cmd == 'rep':
+                parts = args.split()
+                if len(parts) < 2:
+                    await message.reply("Usage: `.rep <trigger> <role_id>`")
+                    return
+                trigger = parts[0].lower()
+                try:
+                    role_id = int(parts[1])
+                except:
+                    await message.reply("❌ Invalid role ID. Provide a numeric ID.")
+                    return
+
+                if not message.guild:
+                    await message.reply("❌ This command only works in a server.")
+                    return
+
+                role = message.guild.get_role(role_id)
+                if not role:
+                    await message.reply("❌ Role not found in this server.")
+                    return
+
+                # Patterns to match the trigger in various forms
+                patterns = [
+                    re.compile(rf'(?:\.gg/|discord\.gg/|https?://(?:www\.)?discord\.gg/)?{re.escape(trigger)}\b', re.IGNORECASE),
+                    re.compile(rf'\b{re.escape(trigger)}\b', re.IGNORECASE),  # standalone word
+                ]
+
+                repping_members = []
+                not_repping_members = []
+
+                for member in role.members:
+                    has_trigger = False
+
+                    # 1. Check custom status
+                    if member.activities:
+                        for act in member.activities:
+                            if act.type == discord.ActivityType.custom and act.state:
+                                if any(p.search(act.state) for p in patterns):
+                                    has_trigger = True
+                                    break
+                        if has_trigger:
+                            repping_members.append(member.mention)
+                            continue
+
+                    # 2. Check bio (About Me) – requires intents and fetch_user
+                    try:
+                        user = await self.fetch_user(member.id)
+                        bio = user.bio or ""
+                        if any(p.search(bio) for p in patterns):
+                            has_trigger = True
+                    except:
+                        pass
+
+                    # 3. Check display name as fallback
+                    if not has_trigger:
+                        if any(p.search(member.display_name) for p in patterns):
+                            has_trigger = True
+
+                    # 4. Pronouns are not available via Discord API – skip (placeholder)
+                    # (Pronoun access is not possible as of now)
+
+                    if has_trigger:
+                        repping_members.append(member.mention)
+                    else:
+                        not_repping_members.append(member.mention)
+
+                # Send results one by one
+                if repping_members:
+                    await message.reply(f"**✅ Repping `{trigger}` ({len(repping_members)}):**\n" + "\n".join(repping_members[:50]))
+                    if len(repping_members) > 50:
+                        await message.channel.send(f"... and {len(repping_members)-50} more (first 50 shown)")
+                else:
+                    await message.reply(f"**✅ Repping `{trigger}`:** No one found.")
+
+                if not_repping_members:
+                    await message.reply(f"**❌ Not repping `{trigger}` ({len(not_repping_members)}):**\n" + "\n".join(not_repping_members[:50]))
+                    if len(not_repping_members) > 50:
+                        await message.channel.send(f"... and {len(not_repping_members)-50} more (first 50 shown)")
+                else:
+                    await message.reply(f"**❌ Not repping `{trigger}`:** All members with the role are repping.")
+
+            
             # ── Existing old commands ──
             elif cmd in ('ping', '8ball', 'joke', 'coinflip', 'roll', 'choose', 'rps', 'cat', 'dog', 'meme', 'quote', 'fact', 'hug', 'slap', 'say', 'embed', 'avatar', 'serverinfo', 'userinfo', 'roleinfo', 'emoji', 'weather', 'define', 'urban', 'translate', 'shorten', 'qr', 'timer', 'remind', 'poll', 'clear', 'purge', 'invite', 'feedback', 'report', 'bug'):
                 await self.handle_old_commands(message, cmd, args)
