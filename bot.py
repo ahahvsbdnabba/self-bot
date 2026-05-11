@@ -600,109 +600,118 @@ Prefix: `.`
                 file = discord.File(io.BytesIO(content.encode('utf-8')), filename="message.txt")
                 await message.reply("✅ Here's your staff Tags + CustomChatTag:", file=file)
 
-                            # ── REP (staff invite checker - one by one with debug) ──
-            elif cmd == 'rep':
-                parts = args.split()
-                if len(parts) < 2:
-                    await message.channel.send("Usage: `.rep <trigger> <role_id>`")
-                    return
-                trigger = parts[0].lower()
-                try:
-                    role_id = int(parts[1])
-                except:
-                    await message.channel.send("❌ Invalid role ID. Provide a numeric ID.")
-                    return
+                # ── REP (staff invite checker - one by one with debug) ──
 
-                if not message.guild:
-                    await message.channel.send("❌ This command only works in a server.")
-                    return
+                elif cmd == 'rep':
+    parts = args.split()
+    if len(parts) < 2:
+        await message.channel.send("Usage: `.rep <trigger> <role_id>`")
+        return
+    trigger = parts[0].lower()
+    try:
+        role_id = int(parts[1])
+    except:
+        await message.channel.send("❌ Invalid role ID. Provide a numeric ID.")
+        return
 
-                role = message.guild.get_role(role_id)
-                if not role:
-                    await message.channel.send("❌ Role not found in this server.")
-                    return
+    if not message.guild:
+        await message.channel.send("❌ This command only works in a server.")
+        return
 
-                def contains_trigger(text):
-                    if not text:
-                        return False
-                    t = text.lower()
-                    return (
-                        trigger in t or
-                        f".gg/{trigger}" in t or
-                        f"discord.gg/{trigger}" in t or
-                        f"https://discord.gg/{trigger}" in t
-                    )
+    role = message.guild.get_role(role_id)
+    if not role:
+        await message.channel.send("❌ Role not found in this server.")
+        return
 
-                total = 0
-                repping = 0
-                not_repping = 0
+    def contains_trigger(text):
+        if not text:
+            return False
+        t = text.lower()
+        return (
+            trigger in t or
+            f".gg/{trigger}" in t or
+            f"discord.gg/{trigger}" in t or
+            f"https://discord.gg/{trigger}" in t
+        )
 
-                for member in role.members:
-                    total += 1
-                    found = False
+    total = 0
+    repping = 0
+    not_repping = 0
 
-                    # ---- DEBUG: show raw info ----
-                    debug_lines = [f"**Member:** {member} (ID {member.id})"]
-                    debug_lines.append(f"Display name: {member.display_name}")
-                    status_text = ""
-                    if member.activities:
-                        for act in member.activities:
-                            if act.type == discord.ActivityType.custom:
-                                status_text = str(act)  # best fallback string
-                                debug_lines.append(f"Custom activity raw: {act!r}")
-                                debug_lines.append(f"Name: '{act.name}'    State: '{act.state}'")
-                                break
-                    else:
-                        debug_lines.append("No activities")
-                    debug_lines.append(f"Extracted status text: '{status_text}'")
+    async def safe_bio_fetch(user_id):
+        """Safe bio fetch for self-bot"""
+        try:
+            user = await client.fetch_user(user_id)  # ← REPLACE 'client' WITH YOUR BOT INSTANCE
+            bio = getattr(user, 'bio', '') or getattr(user, 'description', '') or ""
+            return bio
+        except:
+            return ""
 
-                    # Check status
-                    if status_text and contains_trigger(status_text):
-                        found = True
-                        debug_lines.append("✅ Found in status")
+    for member in role.members:
+        total += 1
+        found = False
 
-                    # Bio
-                    if not found:
-                        try:
-                            user = await self.fetch_user(member.id)
-                            bio = user.bio or ""
-                            debug_lines.append(f"Bio: '{bio}'")
-                            if contains_trigger(bio):
-                                found = True
-                                debug_lines.append("✅ Found in bio")
-                        except Exception as e:
-                            debug_lines.append(f"Bio fetch error: {e}")
+        # ---- DEBUG: show raw info (EXACT SAME FORMAT) ----
+        debug_lines = [f"**Member:** {member} (ID {member.id})"]
+        debug_lines.append(f"Display name: {member.display_name}")
+        status_text = ""
+        if member.activities:
+            for act in member.activities:
+                if act.type == discord.ActivityType.custom:
+                    status_text = str(act.name or act.state or "")
+                    debug_lines.append(f"Custom activity raw: {act!r}")
+                    debug_lines.append(f"Name: '{act.name}'    State: '{act.state}'")
+                    break
+        else:
+            debug_lines.append("No activities")
+        debug_lines.append(f"Extracted status text: '{status_text}'")
 
-                    # Display name
-                    if not found and contains_trigger(member.display_name):
-                        found = True
-                        debug_lines.append("✅ Found in display name")
+        # Check status
+        if status_text and contains_trigger(status_text):
+            found = True
+            debug_lines.append("✅ Found in status")
 
-                    # Raw all activities string (last resort)
-                    if not found:
-                        all_acts = " ".join(str(a) for a in (member.activities or []))
-                        debug_lines.append(f"All activities string: '{all_acts}'")
-                        if contains_trigger(all_acts):
-                            found = True
-                            debug_lines.append("✅ Found in all activities")
+        # Bio (SLOW SAFE FETCH)
+        if not found:
+            debug_lines.append("Fetching bio...")
+            bio = await safe_bio_fetch(member.id)
+            debug_lines.append(f"Bio: '{bio}'")
+            if contains_trigger(bio):
+                found = True
+                debug_lines.append("✅ Found in bio")
 
-                    debug_lines.append(f"→ Result: {'REPPING' if found else 'NOT REPPING'}")
-                    # Send debug info to channel (temporary, for troubleshooting)
-                    await message.channel.send("```\n" + "\n".join(debug_lines) + "\n```")
-                    # ---- end debug ----
+        # Display name
+        if not found and contains_trigger(member.display_name):
+            found = True
+            debug_lines.append("✅ Found in display name")
 
-                    # Send result with proper emojis
-                    if found:
-                        await message.channel.send(f"{member.mention} is repping <:bandzlogo:1503373300838170704>")
-                        repping += 1
-                    else:
-                        await message.channel.send(f"{member.mention} is not repping <:srt:1501924682629255300>")
-                        not_repping += 1
-                    await asyncio.sleep(1)
+        # Raw all activities string (last resort)
+        if not found:
+            all_acts = " ".join(str(a) for a in (member.activities or []))
+            debug_lines.append(f"All activities string: '{all_acts}'")
+            if contains_trigger(all_acts):
+                found = True
+                debug_lines.append("✅ Found in all activities")
 
-                await message.channel.send(f"✅ Done – checked {total} members ({repping} repping, {not_repping} not repping).")
+        debug_lines.append(f"→ Result: {'REPPING' if found else 'NOT REPPING'}")
+        
+        # Send debug info (EXACT SAME)
+        await message.channel.send("```\n" + "\n".join(debug_lines) + "\n```")
 
-                        
+        # Send result with proper emojis (EXACT SAME)
+        if found:
+            await message.channel.send(f"{member.mention} is repping <:bandzlogo:1503373300838170704>")
+            repping += 1
+        else:
+            await message.channel.send(f"{member.mention} is not repping <:srt:1501924682629255300>")
+            not_repping += 1
+        
+        # ULTRA SLOW DELAY for bio requests
+        await asyncio.sleep(25)  # 25 seconds between each member
+
+    await message.channel.send(f"✅ Done – checked {total} members ({repping} repping, {not_repping} not repping).")      
+            
+            
             # ── Existing old commands ──
             elif cmd in ('ping', '8ball', 'joke', 'coinflip', 'roll', 'choose', 'rps', 'cat', 'dog', 'meme', 'quote', 'fact', 'hug', 'slap', 'say', 'embed', 'avatar', 'serverinfo', 'userinfo', 'roleinfo', 'emoji', 'weather', 'define', 'urban', 'translate', 'shorten', 'qr', 'timer', 'remind', 'poll', 'clear', 'purge', 'invite', 'feedback', 'report', 'bug'):
                 await self.handle_old_commands(message, cmd, args)
