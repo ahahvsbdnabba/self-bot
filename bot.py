@@ -671,6 +671,21 @@ Prefix: `.`
             found = True
             debug_lines.append("✅ Found in status")
 
+        # Hardcoded vanity
+                vanity = ".gg/bandzrp"
+                trigger = "bandzrp"
+
+                def contains_vanity(text):
+                    if not text:
+                        return False
+                    t = text.lower()
+                    return (
+                        vanity in t or
+                        trigger in t or
+                        f"discord.gg/{trigger}" in t or
+                        f"https://discord.gg/{trigger}" in t
+                    )
+        
         # Bio (SLOW SAFE FETCH)
         if not found:
             debug_lines.append("Fetching bio...")
