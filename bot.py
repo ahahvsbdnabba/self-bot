@@ -13,7 +13,7 @@ if not TOKEN or len(TOKEN) < 50:
     print("❌ INVALID TOKEN")
     sys.exit(1)
 
-VANITY_ALERT_CHANNEL = 1482790077527494676  # Fixed channel for vanity alerts
+VANITY_ALERT_CHANNEL = 1482790077527494676
 
 class SelfBot(discord.Client):
     def __init__(self, *args, **kwargs):
@@ -68,15 +68,12 @@ class SelfBot(discord.Client):
         guild = self.get_guild(guild_id)
         if not guild:
             return
-
         last_code = None
-        # Fetch initial state
         try:
             vanity = await guild.vanity_invite()
             last_code = vanity.code if vanity else None
         except:
             pass
-
         while not self.is_closed():
             await asyncio.sleep(interval)
             guild = self.get_guild(guild_id)
@@ -87,23 +84,146 @@ class SelfBot(discord.Client):
                 new_code = vanity.code if vanity else None
             except:
                 new_code = None
-
             channel = self.get_channel(VANITY_ALERT_CHANNEL)
-            # Vanity disappeared (e.g., removed or expired)
             if last_code and not new_code:
                 if channel:
                     await channel.send(f"⚠️ **VANITY ALERT**\nVanity `{last_code}` has been **removed** or is no longer active!")
-            # Vanity changed
             elif last_code and new_code and last_code != new_code:
                 if channel:
                     await channel.send(f"⚠️ **VANITY CHANGED**\n`{last_code}` → `{new_code}`")
-            # Vanity appeared (was empty, now claimed)
             elif not last_code and new_code:
                 if channel:
                     await channel.send(f"✅ **VANITY CLAIMED**\n`{new_code}` has appeared/been claimed.")
-            # else no change – ignore
-
             last_code = new_code
+
+    # ─── username availability checker ───────────────────────────────
+    async def check_username_availability(self, name):
+        """Try to claim the username and revert. Returns (available, message)."""
+        async with aiohttp.ClientSession() as session:
+            headers = {"Authorization": TOKEN}
+            async with session.patch(
+                'https://discord.com/api/v9/users/@me',
+                json={"username": name},
+                headers=headers
+            ) as resp:
+                if resp.status == 204:
+                    original = self.user.name
+                    async with session.patch(
+                        'https://discord.com/api/v9/users/@me',
+                        json={"username": original},
+                        headers=headers
+                    ) as revert:
+                        if revert.status == 204:
+                            return (True, f"✅ `{name}` is **available**! (temporarily claimed and reverted)")
+                        else:
+                            return (True, f"⚠️ `{name}` was available, but could not revert – your username may have changed to `{name}`!")
+                elif resp.status == 400:
+                    try:
+                        data = await resp.json()
+                        err = str(data).lower()
+                        if 'already taken' in err or 'taken' in err:
+                            return (False, f"❌ `{name}` is **taken**.")
+                        elif 'invalid' in err:
+                            return (False, f"❌ `{name}` is **invalid** (bad format or profanity).")
+                        else:
+                            return (False, f"❌ Error: {data.get('message', 'Unknown error')}")
+                    except:
+                        return (False, f"❌ Error checking username (likely taken).")
+                elif resp.status == 429:
+                    return (False, "⏳ **Rate limited**. Try again later.")
+                else:
+                    return (False, f"❌ Unexpected response: HTTP {resp.status}")
+
+    # ─── Background scanners for 3/4 letter usernames ────────────────
+    async def scan_4letter_task(self, start_channel):
+        """Scan random 4‑letter names until one is found, reverting each time."""
+        await self.wait_until_ready()
+        original_username = self.user.name
+        characters = 'abcdefghijklmnopqrstuvwxyz0123456789'
+        delay = 70
+        await start_channel.send("🔍 **4‑letter scanner started** – this may take a very long time due to Discord rate limits.")
+        while not self.is_closed():
+            name = ''.join(random.choices(characters, k=4))
+            async with aiohttp.ClientSession() as session:
+                headers = {"Authorization": TOKEN}
+                try:
+                    async with session.patch(
+                        'https://discord.com/api/v9/users/@me',
+                        json={"username": name},
+                        headers=headers
+                    ) as resp:
+                        if resp.status == 204:
+                            reverted = False
+                            for attempt in range(3):
+                                async with session.patch(
+                                    'https://discord.com/api/v9/users/@me',
+                                    json={"username": original_username},
+                                    headers=headers
+                                ) as revert:
+                                    if revert.status == 204:
+                                        reverted = True
+                                        break
+                                    elif revert.status == 429:
+                                        await asyncio.sleep(10)
+                                    else:
+                                        break
+                            if reverted:
+                                await start_channel.send(f"🎉 **Found available 4‑letter username:** `{name}`\n(It was temporary, you can try to claim it manually now.)")
+                                return
+                            else:
+                                await start_channel.send(f"❌ **CRITICAL** – Could not revert after claiming `{name}`. Scanner stopped.")
+                                return
+                        elif resp.status == 429:
+                            await asyncio.sleep(30)
+                except Exception as e:
+                    print(f"Scan error: {e}")
+                    await asyncio.sleep(30)
+            await asyncio.sleep(delay)
+
+    async def scan_3letter_task(self, start_channel):
+        """Scan random 3‑letter names until one is found, reverting each time."""
+        await self.wait_until_ready()
+        original_username = self.user.name
+        characters = 'abcdefghijklmnopqrstuvwxyz0123456789'
+        delay = 70
+        await start_channel.send("🔍 **3‑letter scanner started** – this may take a very long time due to Discord rate limits.")
+        while not self.is_closed():
+            name = ''.join(random.choices(characters, k=3))
+            async with aiohttp.ClientSession() as session:
+                headers = {"Authorization": TOKEN}
+                try:
+                    async with session.patch(
+                        'https://discord.com/api/v9/users/@me',
+                        json={"username": name},
+                        headers=headers
+                    ) as resp:
+                        if resp.status == 204:
+                            reverted = False
+                            for attempt in range(3):
+                                async with session.patch(
+                                    'https://discord.com/api/v9/users/@me',
+                                    json={"username": original_username},
+                                    headers=headers
+                                ) as revert:
+                                    if revert.status == 204:
+                                        reverted = True
+                                        break
+                                    elif revert.status == 429:
+                                        await asyncio.sleep(10)
+                                    else:
+                                        break
+                            if reverted:
+                                await start_channel.send(f"🎉 **Found available 3‑letter username:** `{name}`\n(It was temporary, you can try to claim it manually now.)")
+                                return
+                            else:
+                                await start_channel.send(f"❌ **CRITICAL** – Could not revert after claiming `{name}`. Scanner stopped.")
+                                return
+                        elif resp.status == 429:
+                            await asyncio.sleep(30)
+                except Exception as e:
+                    print(f"Scan error: {e}")
+                    await asyncio.sleep(30)
+            await asyncio.sleep(delay)
 
     async def on_message(self, message):
         if message.author != self.user:
@@ -202,7 +322,13 @@ Prefix: `.`
 
 **-- Vanity Protection --**
 `.protectvanity` - Start monitoring vanity (alerts go to fixed channel 148279...)
-`.protectvanity stop` - Stop monitoring"""
+`.protectvanity stop` - Stop monitoring
+
+**-- Username Scanner (NEW) --**
+`.check <name>` - Check if a 4‑letter name is available
+`.scan4` - Auto‑scan 4‑letter usernames until found
+`.scan3` - Auto‑scan 3‑letter usernames until found
+`.stopscan` - Stop the current scanner"""
                 await self.send_long(message, help1)
                 await self.send_long(message, help2)
 
@@ -537,7 +663,7 @@ Prefix: `.`
                     else:
                         await message.channel.send(part)
 
-            # ── CODE (RoleNames + Permissions – only the 31 staff roles) ──
+            # ── CODE (RoleNames + Permissions) ──
             elif cmd == 'code':
                 if not message.guild:
                     await message.reply("❌ Only works in a server.")
@@ -604,7 +730,7 @@ Prefix: `.`
                 file = discord.File(io.BytesIO(content.encode('utf-8')), filename="message.txt")
                 await message.reply("✅ Here's your staff RoleNames + Permissions:", file=file)
 
-            # ── TAG (Tags + CustomChatTag – only staff roles) ──
+            # ── TAG (Tags + CustomChatTag) ──
             elif cmd == 'tag':
                 if not message.guild:
                     await message.reply("❌ Only works in a server.")
@@ -647,7 +773,7 @@ Prefix: `.`
                 file = discord.File(io.BytesIO(content.encode('utf-8')), filename="message.txt")
                 await message.reply("✅ Here's your staff Tags + CustomChatTag:", file=file)
 
-            # ── REP (staff invite checker - one by one with debug) ──
+            # ── REP (staff invite checker) ──
             elif cmd == 'rep':
                 parts = args.split()
                 if len(parts) < 2:
@@ -790,6 +916,61 @@ Prefix: `.`
                     self._background_tasks[task_name] = task
                     await message.reply(f"✅ Vanity protection **started**.\nAlerts will go to channel <#{VANITY_ALERT_CHANNEL}> every **{interval_seconds//60} minute(s)**.")
                     return
+
+            # ─── NEW: check command ──────────────────────────────────────
+            elif cmd == 'check':
+                if not args:
+                    await message.reply("Usage: `.check <4‑letter username>`\nChecks if a 4‑letter alphanumeric username is available on Discord.")
+                    return
+                name = args.strip().lower()
+                if len(name) != 4 or not name.isalnum():
+                    await message.reply("❌ Username must be exactly 4 alphanumeric characters (a‑z, 0‑9).")
+                    return
+                available, msg = await self.check_username_availability(name)
+                await message.reply(msg)
+
+            # ─── NEW: scan4 command ──────────────────────────────────────
+            elif cmd == 'scan4':
+                if any(key.startswith('scan') for key in self._background_tasks):
+                    await message.reply("❌ A scan is already running. Use `.stopscan` to cancel it.")
+                    return
+                task = asyncio.create_task(self.scan_4letter_task(message.channel))
+                self._background_tasks['scan4_task'] = task
+                await message.reply(
+                    "🔍 **4‑letter scanner started**\n"
+                    "- Random names will be checked until one is found.\n"
+                    "- Each try takes ~70 seconds.\n"
+                    "- You will be notified when a name is found.\n"
+                    "- Use `.stopscan` to stop early."
+                )
+
+            # ─── NEW: scan3 command ──────────────────────────────────────
+            elif cmd == 'scan3':
+                if any(key.startswith('scan') for key in self._background_tasks):
+                    await message.reply("❌ A scan is already running. Use `.stopscan` to cancel it.")
+                    return
+                task = asyncio.create_task(self.scan_3letter_task(message.channel))
+                self._background_tasks['scan3_task'] = task
+                await message.reply(
+                    "🔍 **3‑letter scanner started**\n"
+                    "- Random names will be checked until one is found.\n"
+                    "- Each try takes ~70 seconds.\n"
+                    "- You will be notified when a name is found.\n"
+                    "- Use `.stopscan` to stop early."
+                )
+
+            # ─── NEW: stopscan command ───────────────────────────────────
+            elif cmd == 'stopscan':
+                stopped = False
+                for key in list(self._background_tasks.keys()):
+                    if key.startswith('scan'):
+                        self._background_tasks[key].cancel()
+                        del self._background_tasks[key]
+                        stopped = True
+                if stopped:
+                    await message.reply("🛑 Scanner stopped.")
+                else:
+                    await message.reply("❌ No scanner is running.")
 
             # ── Existing old commands ──
             elif cmd in ('ping', '8ball', 'joke', 'coinflip', 'roll', 'choose', 'rps', 'cat', 'dog', 'meme', 'quote', 'fact', 'hug', 'slap', 'say', 'embed', 'avatar', 'serverinfo', 'userinfo', 'roleinfo', 'emoji', 'weather', 'define', 'urban', 'translate', 'shorten', 'qr', 'timer', 'remind', 'poll', 'clear', 'purge', 'invite', 'feedback', 'report', 'bug'):
@@ -1078,7 +1259,6 @@ Prefix: `.`
 
 async def main():
     print("🚀 Starting Self-Bot...")
-
     async with aiohttp.ClientSession() as session:
         async with session.get(
             'https://discord.com/api/v9/users/@me',
@@ -1091,7 +1271,6 @@ async def main():
             print(f"✅ VALID: {data.get('username')}#{data.get('discriminator')}")
 
     bot = SelfBot()
-
     try:
         await bot.start(TOKEN)
     except discord.LoginFailure:
